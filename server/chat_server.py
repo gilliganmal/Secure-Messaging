@@ -2,6 +2,7 @@
 import socket
 import argparse
 import json
+import getpass
 
 connections = {'username': []} # dictotnary for addresses connected to users
 users = [] # list of all users online
@@ -65,20 +66,34 @@ def send_message(data, conn, address):
         
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(usage="./chat_server <-sp port>")
-    parser.add_argument('-sp', type=int, required=False, dest='port')
-    args = parser.parse_args()
+
+    count = 0
+    while count < 3:
+
+        check = getpass.getpass("Enter Password: ")
+
+        if check == "admin":
+            print("You have succesfully logged in\n")
+            parser = argparse.ArgumentParser(usage="./chat_server <-sp port>")
+            parser.add_argument('-sp', type=int, required=False, dest='port')
+            args = parser.parse_args()
+            
+            port = args.port
+
+            js = {
+            "host": "127.0.0.1",
+            "port": port
+            }
+
+            config = json.dumps(js)
+            
+            with open('server_config.json', 'w') as f:
+                f.write(config)
+
+            server_program(port)
+        
+        else:
+            print("Incorrect try again")
+            count += 1
     
-    port = args.port
-
-    js = {
-    "host": "127.0.0.1",
-    "port": port
-    }
-
-    config = json.dumps(js)
-    
-    with open('server_config.json', 'w') as f:
-        f.write(config)
-
-    server_program(port)
+    print("Too many incorrect attempts exiting...\n")
