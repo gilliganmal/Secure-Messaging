@@ -5,7 +5,9 @@ import sys
 import select
 import getpass
 import random
-import hashlib
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import dh
 
 list_mes = {'type': 'list'}
 
@@ -17,9 +19,26 @@ def send_message(client_socket, server_address, message):
 def generate_salt():
     return str(random.randint(0, 99999999)).encode()
 
+# Function to generate a random private key 'a'
+def generate_private_key():
+    return random.randint(1, 99999999)
+
+def generate_p_and_g():
+    # Generate parameters for Diffie-Hellman key exchange
+    parameters = dh.generate_parameters(generator=2, key_size=1024, backend=default_backend())
+
+    # Extract the prime 'p' and generator 'g'
+    p = parameters.parameter_numbers().p
+    g = parameters.parameter_numbers().g
+
+    return p, g
+
 # Function to generate the verifier based on the password and salt
 def generate_verifier(password, salt):
-    return hashlib.sha256(password.encode() + salt).hexdigest()
+    password_bytes = password.encode()
+    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+    digest.update(password_bytes + salt)
+    return digest.finalize().hex()
 
 def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
@@ -31,9 +50,12 @@ def client_program(host, port, user):
         # Generate a random salt and verifier based on the password
         salt = generate_salt()
         verifier = generate_verifier(password, salt)
+        private_key = generate_private_key()
+        p, g = generate_p_and_g()
+        public_key = pow(g, private_key, p)
 
         # Send sign-in message to the server including username, salt, and verifier
-        mes = {"type": "SIGN-IN", "username": user, "salt": salt.decode(), "verifier": verifier, 'port': port, 'ip': host}
+        mes = {"type": "SIGN-IN", "username": user, "verifier": verifier, "A": public_key, 'port': port, 'ip': host}
         send_message(client_socket, server_add, mes)
 
         print("Please enter command:")
