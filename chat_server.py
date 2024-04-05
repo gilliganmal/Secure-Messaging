@@ -71,5 +71,14 @@ if __name__ == '__main__':
     
     port = args.port
 
+    js = {
+    "host": "127.0.0.1",
+    "port": port
+    }
+
+    config = json.dumps(js)
+    
+    with open('server_config.json', 'w') as f:
+        f.write(config)
+
     server_program(port)
-        
