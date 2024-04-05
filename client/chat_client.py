@@ -55,7 +55,7 @@ def client_program(host, port, user):
         public_key = pow(g, private_key, p)
 
         # Send sign-in message to the server including username, salt, and verifier
-        mes = {"type": "SIGN-IN", "username": user, "verifier": verifier, "A": public_key, 'port': port, 'ip': host}
+        mes = {"type": "SIGN-IN", "username": user, "verifier": verifier, "gamodp": public_key, 'port': port, 'ip': host}
         send_message(client_socket, server_add, mes)
 
         print("Please enter command:")

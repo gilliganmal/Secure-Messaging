@@ -3,10 +3,10 @@ import socket
 import argparse
 import json
 import getpass
+import random
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
-
 
 # Dictionary to store user information
 users = {}
@@ -20,6 +20,22 @@ def generate_p_and_g():
     g = parameters.parameter_numbers().g
 
     return p, g
+
+# Generate a random private key 'b'
+def generate_private_key():
+    return random.randint(1, 99999999)
+
+# Generate a random nonce 'c1'
+def generate_nonce():
+    return random.randint(1, 99999999)
+
+# Generate a 32-bit number 'u'
+def generate_u():
+    return random.randint(0, (1 << 32) - 1)
+
+# Calculate K = g^(b(a+u*W))
+def calculate_shared_key(b, a, verifier, u, g, p):
+    return pow(a, b + u * verifier, p)
 
 # handles all server operations
 def server_program(port):
@@ -38,7 +54,7 @@ def server_program(port):
 
         # branches based on what type of packet we received
         if type == 'SIGN-IN':
-            store_user(data, address)
+            store_user(data, address, server_socket)
         elif type == 'list':
             list_users(server_socket, address)
         elif type == 'send':
@@ -50,18 +66,42 @@ def server_program(port):
             mes = "Please enter a valid command either 'list' or 'send'"
             server_socket.sendto(mes.encode(), address)
 
+
 # after a user logs in save their data to places it can be accessed later
-def store_user(data, address):
+def store_user(data, address, conn):
     username = data['username']
     verifier = int(data['verifier'], 16)  # Convert hexadecimal string to integer
     p, g = generate_p_and_g()
-    g_verifier = pow(g, verifier, p)  # Calculate g^verifier mod p
+    b = generate_private_key()
+    u = generate_u()
+    c1 = generate_nonce()
+    gWmodp = pow(g, verifier, p)  # Calculate g^verifier mod p
 
-    # Store user information in the dictionary
+
+    # Calculate the shared key K = g^(b(a+u*verifier))
+    K = calculate_shared_key(b, int(data['gamodp']), verifier, u, g, p)
+
+
+    # Send (g^b + g^W mod p, u, c1) to the client
+    # Send (g^b + g^W mod p, u, c1) to the client
+    message = {
+        'g^b_mod_p': pow(g, b, p),
+        'u': u,
+        'c1': c1
+    }
+
+    # Convert message to JSON format
+    message_json = json.dumps(message)
+
+    # Send the JSON message back to the client
+    conn.sendto(message_json.encode(), address)
+
+
     users[username] = {
-        'g_verifier': g_verifier,
+        'g_verifier': gWmodp,
         'address': str(address),
-        'public_key': data['A']
+        'gamodp': data['gamodp'],
+        'K': K
     }
 
 
