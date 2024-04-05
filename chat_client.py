@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import argparse
 import socket 
 import json
 import sys
@@ -12,7 +11,7 @@ def send_message(client_socket, server_address, message):
     client_socket.sendto(json.dumps(message).encode(), server_address)
 
 # Handles everything client side
-def client_program():
+def client_program(host, port, user):
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
@@ -90,16 +89,13 @@ def get_message(cmd):
     return mes
 
 if __name__ == '__main__':
-    # parses command line
-    parser = argparse.ArgumentParser(usage="./chat_client <-u username> <-sip server-ip> <-sp port>")
-    parser.add_argument('-u', type=str, required=True, dest='username')
-    parser.add_argument('-sip', type=str, required=True, dest='server')
-    parser.add_argument('-sp', type=int, required=True, dest='port')
-    args = parser.parse_args()
+    # load server configuration from the JSON file
+    with open('server_config.json', 'r') as f:
+        config_data = json.load(f)
+        host = config_data['host']
+        port = int(config_data['port'])
     
-    # saves data we'll need to refernce later
-    port = args.port
-    host = args.server
-    user = args.username
+    # take username from user input
+    user = input("Please enter your username: ")
 
-    client_program()
+    client_program(host, port, user)
