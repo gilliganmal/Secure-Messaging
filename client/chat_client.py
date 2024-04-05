@@ -93,7 +93,7 @@ def get_message(cmd):
     return mes
 
 if __name__ == '__main__':
-    with open('server_config.json', 'r') as f:
+    with open('../server_config.json', 'r') as f:
         config_data = json.load(f)
         host = config_data['host']
         port = int(config_data['port'])
