@@ -3,81 +3,85 @@ import socket
 import json
 import sys
 import select
+import getpass
+import random
+import hashlib
 
 list_mes = {'type': 'list'}
 
-# function to send messages
+# Function to send messages
 def send_message(client_socket, server_address, message):
     client_socket.sendto(json.dumps(message).encode(), server_address)
 
-# Handles everything client side
-def client_program(host, port, user):
+# Function to generate a random salt
+def generate_salt():
+    return str(random.randint(0, 99999999)).encode()
 
+# Function to generate the verifier based on the password and salt
+def generate_verifier(password, salt):
+    return hashlib.sha256(password.encode() + salt).hexdigest()
+
+def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
-    
+
     try:
-        # sends sign in message to the server so they can save user info
-        mes = {"type": "SIGN-IN", "username": user, 'port': port, 'ip': host}
+        password = getpass.getpass("Please enter your password: ")
+
+        # Generate a random salt and verifier based on the password
+        salt = generate_salt()
+        verifier = generate_verifier(password, salt)
+
+        # Send sign-in message to the server including username, salt, and verifier
+        mes = {"type": "SIGN-IN", "username": user, "salt": salt.decode(), "verifier": verifier, 'port': port, 'ip': host}
         send_message(client_socket, server_add, mes)
 
-        print("Please enter command:")  
+        print("Please enter command:")
 
-        # while online
+        # While online
         while True:
-            
             sockets_list = [sys.stdin, client_socket]
             read_sockets, _, _ = select.select(sockets_list, [], [])  # monitor for read events
             for sock in read_sockets:
-                # if we message ourselves
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
                     print(data)  # show in terminal
                 elif sock == sys.stdin:
-                    message = input("") # take input
+                    message = input("")  # take input
                     cmd = message.split()  # split input
-                    # handle accidental enter before typing
                     try:
-                        # list command
                         if cmd[0] == 'list':
                             send_message(client_socket, server_add, list_mes)  # send message
                             data = client_socket.recv(65535).decode()  # receive response
                             print(data)  # show in terminal
-                        # send command
                         elif cmd[0] == 'send':
-                            # first we send a request to the server for the address of the person
-                            # we want to message
                             to = cmd[1]
                             text = get_message(cmd)
                             server_mes = {'type': 'send', 'USERNAME': to}
                             send_message(client_socket, server_add, server_mes)
-                            data = client_socket.recv(65535).decode()  # receive ip and port fromm server
+                            data = client_socket.recv(65535).decode()  # receive ip and port from server
 
-                            # Now send our message directly to the client wanted
                             load = json.loads(data)
                             if load['ADDRESS'] == 'fail':
                                 print(load['MES'])
                             else:
                                 addr = eval(load['ADDRESS'])
                                 send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
-                                client_socket.sendto(send_mes.encode(), addr) # send to other client
+                                client_socket.sendto(send_mes.encode(), addr)  # send to other client
                         else:
-                            # prints messages we recive
                             print("<- Please enter a valid command either 'list' or 'send'")
                             data = client_socket.recv(65535).decode()  # receive response
                             print(data)  # show in terminal
                     except IndexError:
                         print("<- Please enter a valid command either 'list' or 'send'")
-                    
+
             sys.stdout.flush()  # flush the buffer to ensure immediate display
-    
+
     except KeyboardInterrupt:
-        # tells server we logged out
         exit_mes = {'type': 'exit', 'USERNAME': user}
         send_message(client_socket, server_add, exit_mes)
         print("\nExiting the client.")
 
-# isolates the message to be sent no matter the length
 def get_message(cmd):
     mes = ''
     length = len(cmd)
@@ -89,13 +93,11 @@ def get_message(cmd):
     return mes
 
 if __name__ == '__main__':
-    # load server configuration from the JSON file
     with open('server_config.json', 'r') as f:
         config_data = json.load(f)
         host = config_data['host']
         port = int(config_data['port'])
     
-    # take username from user input
     user = input("Please enter your username: ")
 
     client_program(host, port, user)
