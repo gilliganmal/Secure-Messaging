@@ -1,0 +1,58 @@
+from utils import *
+
+class SRPServer:
+	"SRP server-side class."
+	def __init__(self, gn=DEFAULT_GROUP_PARAMETERS):
+		self.g = gn['g']
+		self.N = gn['N']
+		self.b = 0
+		self.B = 0
+		self.M = b''
+		self.hashed_AMK = b''
+		self.session_key = b''
+		self.auth = False
+
+	def compute_server_values(self, username, verifier, byte_size=DEFAULT_SECRETSIZE):
+		'''
+		Calculates server values
+		b = random()
+		k = SHA1(N | PAD(g))
+		B = k*v + g^b % N
+		'''
+		l = self.N.bit_length()
+
+		self.b = obj_to_int(get_randombytes(byte_size))
+		k = obj_to_int(compute_hash(self.N, compute_padding(self.g, l)))
+
+		self.B = (k * verifier + pow(self.g, self.b, self.N)) % self.N
+		return self.B
+
+	def compute_premaster_secret(self, username, salt, verifier, client_A, scs=DEFAULT_SECRETSIZE):
+		'''
+		Calculates server premaster secret
+		u = SHA1(PAD(A) | PAD(B))
+		<premaster secret> = (A * v^u) ^ b % N
+		'''
+		l = self.N.bit_length()
+		padded_client_A = compute_padding(client_A, l)
+		padded_server_B = compute_padding(self.B, l)
+		u = obj_to_int(compute_hash(padded_client_A, padded_server_B))
+
+		self.premaster_secret = pow(client_A * pow(verifier, u, self.N), self.b, self.N)
+		return self.premaster_secret
+
+	def compute_session_key(self, username, salt, client_A):
+		'''
+		Calculates server's session key and evidence message.
+		M = H(H(N) XOR H(g) | H(U) | s | A | B | K)
+		H(A | M | K)
+		'''
+		self.session_key = compute_hash(self.premaster_secret)
+		self.M = compute_M(self.g, self.N, username, salt, client_A, self.B, self.session_key)
+		self.hashed_AMK = compute_hash(client_A, self.M, self.session_key)
+		return self.M
+	
+	def verify_session(self, client_M):
+		if self.M == client_M:
+			self.auth = True
+		return self.hashed_AMK
