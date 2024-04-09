@@ -31,6 +31,14 @@ def compute_server_response(g, p, verifier):
     gW_mod_p = verifier  # This is g^W mod p, already computed as the verifier
     return (gb_mod_p + gW_mod_p) % p, b
 
+# Function to compute shared key where K = g^{b(a+uW}mod p 
+def compute_shared_key(gamodp, b, u, verifier, p):
+    # Compute the shared key K
+    K = pow(gamodp * pow(verifier, u, p), b, p)
+    return K
+
+
+
 # handles all server operations
 def server_program(port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # get instance
@@ -76,6 +84,7 @@ def store_user(data, address, conn):
 
     # Compute server response values
     gb_plus_gW_mod_p, b = compute_server_response(g, p, verifier)
+    print(gb_plus_gW_mod_p, "yo dis gb_plus_gW_mod_p")
     u = generate_u()
     c_1 = generate_nonce()
 
@@ -83,11 +92,16 @@ def store_user(data, address, conn):
     response = {
         "type": "SRP_RESPONSE",
         "g^b+g^W_mod_p": gb_plus_gW_mod_p,
-        "b": b,
         "u": u,
         "c_1": c_1
     }
     conn.sendto(json.dumps(response).encode(), address)
+
+    #Shared key
+
+    # Compute shared key using gamodp from client, b and u from server, and verifier gWmodp from user's stored data
+    K = compute_shared_key(gamodp, b, u, verifier, p)
+    print(K, "yo dis server side K")
 
 
 # lists all users currently online
