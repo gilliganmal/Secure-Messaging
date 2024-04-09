@@ -11,16 +11,6 @@ from cryptography.hazmat.primitives.asymmetric import dh
 # Dictionary to store user information
 users = {}
 
-def generate_p_and_g():
-    # Generate parameters for Diffie-Hellman key exchange
-    parameters = dh.generate_parameters(generator=2, key_size=1024, backend=default_backend())
-
-    # Extract the prime 'p' and generator 'g'
-    p = parameters.parameter_numbers().p
-    g = parameters.parameter_numbers().g
-
-    return p, g
-
 # Generate a random private key 'b'
 def generate_private_key():
     return random.randint(1, 99999999)
@@ -33,9 +23,13 @@ def generate_nonce():
 def generate_u():
     return random.randint(0, (1 << 32) - 1)
 
-# Calculate K = g^(b(a+u*W))
-def calculate_shared_key(b, a, verifier, u, g, p):
-    return pow(a, b + u * verifier, p)
+# Function to compute g^b and g^W mod p to send back to client
+#returns gb_mod_p + gW_mod_p and b 
+def compute_server_response(g, p, verifier):
+    b = generate_private_key()  # Random b
+    gb_mod_p = pow(g, b, p)  # Compute g^b mod p
+    gW_mod_p = verifier  # This is g^W mod p, already computed as the verifier
+    return (gb_mod_p + gW_mod_p) % p, b
 
 # handles all server operations
 def server_program(port):
@@ -70,39 +64,30 @@ def server_program(port):
 # after a user logs in save their data to places it can be accessed later
 def store_user(data, address, conn):
     username = data['username']
-    verifier = int(data['verifier'], 16)  # Convert hexadecimal string to integer
-    p, g = generate_p_and_g()
-    b = generate_private_key()
+    gamodp = data['g^amodp']
+
+    # Load server configuration and user database to get the p,g, and verifier of the user
+    with open('users.json', 'r') as f:
+        user_db = json.load(f)
+    
+    p = int(user_db['p'])
+    g = int(user_db['g'])
+    verifier = int(user_db['users'][username]['verifier'])  # This is g^W mod p
+
+    # Compute server response values
+    gb_plus_gW_mod_p, b = compute_server_response(g, p, verifier)
     u = generate_u()
-    c1 = generate_nonce()
-    gWmodp = pow(g, verifier, p)  # Calculate g^verifier mod p
+    c_1 = generate_nonce()
 
-
-    # Calculate the shared key K = g^(b(a+u*verifier))
-    K = calculate_shared_key(b, int(data['gamodp']), verifier, u, g, p)
-
-
-    # Send (g^b + g^W mod p, u, c1) to the client
-    # Send (g^b + g^W mod p, u, c1) to the client
-    message = {
-        'g^b_mod_p': pow(g, b, p),
-        'u': u,
-        'c1': c1
+    # Send server response to client
+    response = {
+        "type": "SRP_RESPONSE",
+        "g^b+g^W_mod_p": gb_plus_gW_mod_p,
+        "b": b,
+        "u": u,
+        "c_1": c_1
     }
-
-    # Convert message to JSON format
-    message_json = json.dumps(message)
-
-    # Send the JSON message back to the client
-    conn.sendto(message_json.encode(), address)
-
-
-    users[username] = {
-        'g_verifier': gWmodp,
-        'address': str(address),
-        'gamodp': data['gamodp'],
-        'K': K
-    }
+    conn.sendto(json.dumps(response).encode(), address)
 
 
 # lists all users currently online
@@ -153,4 +138,3 @@ if __name__ == '__main__':
             count += 1
 
     print("Too many incorrect attempts exiting...\n")
-    
