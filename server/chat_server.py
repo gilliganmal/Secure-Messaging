@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-import socket
-import argparse
-import json
-import getpass
-import random
+import socket, argparse, json, getpass, random, base64, os
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
 
 # Dictionary to store user information
 users = {}
@@ -15,7 +15,7 @@ users = {}
 def generate_private_key():
     return random.randint(1, 99999999)
 
-# Generate a random nonce 'c1'
+# Generate a random nonce 'c1' 
 def generate_nonce():
     return random.randint(1, 99999999)
 
@@ -34,9 +34,35 @@ def compute_server_response(g, p, verifier):
 # Function to compute shared key where K = g^{b(a+uW}mod p 
 def compute_shared_key(gamodp, b, u, verifier, p):
     # Compute the shared key K
-    K = pow(gamodp * pow(verifier, u, p), b, p)
-    return K
+    K_server = pow(gamodp * pow(verifier, u, p), b, p)
+    return K_server
 
+# Derive a 256-bit key from K_client
+def derive_key(K_server):
+    # Convert K_client to bytes
+    K_server_bytes = K_server.to_bytes((K_server.bit_length() + 7) // 8, byteorder="big")
+    # Derive a key using HKDF
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info = b'handshake data',
+        backend=default_backend()
+    )
+    return hkdf.derive(K_server_bytes)
+
+#encrypt with the key
+def encrypt_with_key(key, plaintext):
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)  # AES-GCM standard nonce size
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return nonce + ciphertext  # Return nonce concatenated with ciphertext
+
+# Function to decrypt data with AES-GCM
+def decrypt_with_key(key, encrypted_data_with_nonce):
+    aesgcm = AESGCM(key)
+    nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
+    return aesgcm.decrypt(nonce, ciphertext, None)
 
 
 # handles all server operations
@@ -57,6 +83,8 @@ def server_program(port):
         # branches based on what type of packet we received
         if type == 'SIGN-IN':
             store_user(data, address, server_socket)
+        if type == 'AUTH_MESSAGE':
+            handle_auth_message(data, address, server_socket)
         elif type == 'list':
             list_users(server_socket, address)
         elif type == 'send':
@@ -64,9 +92,11 @@ def server_program(port):
         elif type == 'exit':
             user = data['USERNAME']
             users.pop(user, None)  # Remove user from the dictionary
-        else:
-            mes = "Please enter a valid command either 'list' or 'send'"
-            server_socket.sendto(mes.encode(), address)
+        # else:
+        #     message = {"type": "error", "message": "Invalid command"}         
+        #     server_socket.sendto(json.dumps(message).encode(), address)
+            
+            
 
 
 # after a user logs in save their data to places it can be accessed later
@@ -84,7 +114,6 @@ def store_user(data, address, conn):
 
     # Compute server response values
     gb_plus_gW_mod_p, b = compute_server_response(g, p, verifier)
-    print(gb_plus_gW_mod_p, "yo dis gb_plus_gW_mod_p")
     u = generate_u()
     c_1 = generate_nonce()
 
@@ -98,11 +127,54 @@ def store_user(data, address, conn):
     conn.sendto(json.dumps(response).encode(), address)
 
     #Shared key
-
     # Compute shared key using gamodp from client, b and u from server, and verifier gWmodp from user's stored data
-    K = compute_shared_key(gamodp, b, u, verifier, p)
-    print(K, "yo dis server side K")
+    K_server = compute_shared_key(gamodp, b, u, verifier, p)
 
+    users[address] = {
+        "username": username,
+        "K_server": K_server,
+        "c1": c_1  # Include c1 here for later verification
+    }
+    
+
+
+# handling for AUTH_MESSAGE type where the server received the cnrypted c_1 and c_2 from the client. The server needs to make
+# sure the c_1 is correct and then send back the encrypted c_2
+def handle_auth_message(data, address, server_socket):
+    if address in users:
+        K_server = users[address]["K_server"]
+        c_1 = users[address]["c1"]
+        # Derive AES key from K_server
+        derived_key = derive_key(K_server)
+
+        try:
+            # Decrypt encrypted_c1
+            encrypted_c1 = base64.b64decode(data['encrypted_c1'])
+            decrypted_c1 = decrypt_with_key(derived_key, encrypted_c1)
+            # Convert decrypted_c1 from bytes to an integer
+            decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
+            # Verify c_1 or perform necessary checks
+            if c_1 != decrypted_c1_int:
+                message = {"type": "error", "message": "User verification failed"}         
+                server_socket.sendto(json.dumps(message).encode(), address)
+
+            else:
+                # Encrypt c_2 received from the client to send back
+                c_2 = data['c_2']
+                # convert
+                c_2_bytes = c_2.to_bytes((c_2.bit_length() + 7) // 8, 'big')
+                # Encrypt c_1 with the derived symmetric key
+                encrypted_c2 = encrypt_with_key(derived_key, c_2_bytes)
+                print(encrypted_c2, "encrypted_c2")
+                response = {
+                    "type": "AUTH_RESPONSE",
+                    "encrypted_c2": base64.b64encode(encrypted_c2).decode(),
+                }
+                server_socket.sendto(json.dumps(response).encode(), address)
+        except InvalidTag:
+            message = {"type": "error", "message": "User verification failed"}         
+            server_socket.sendto(json.dumps(message).encode(), address)
+        
 
 # lists all users currently online
 def list_users(conn, address):
@@ -128,7 +200,7 @@ if __name__ == '__main__':
     while count < 3:
         check = getpass.getpass("Enter Password: ")
         if check == "admin":
-            print("You have successfully logged in\n")
+            print("You have successfully logged in as admin\n")
             parser = argparse.ArgumentParser(usage="./chat_server <-sp port>")
             parser.add_argument('-sp', type=int, required=False, dest='port')
             args = parser.parse_args()

@@ -42,7 +42,6 @@ users_passwords = {
 }
 
 
-
 # Generate your safe prime and generator
 p, g = generate_dh_parameters()
 

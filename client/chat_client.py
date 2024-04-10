@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 import socket 
-import json
+import os
+import json, base64
 import sys
 import select
 import getpass
 import random
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 
 list_mes = {'type': 'list'}
 
@@ -56,6 +60,35 @@ def compute_client_shared_key(B, g, p, a, u, password):
     return K
 
 
+# Derive a 256-bit key from K_client
+def derive_key(K_client):
+    # Convert K_client to bytes
+    K_client_bytes = K_client.to_bytes((K_client.bit_length() + 7) // 8, byteorder="big")
+    # Derive a key using HKDF
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info = b'handshake data',
+        backend=default_backend()
+    )
+    return hkdf.derive(K_client_bytes)
+
+#encrypt with the key
+def encrypt_with_key(key, plaintext):
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)  # AES-GCM standard nonce size
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    return nonce + ciphertext  # Return nonce concatenated with ciphertext
+
+
+# Function to decrypt data with AES-GCM
+def decrypt_with_key(key, encrypted_data_with_nonce):
+    aesgcm = AESGCM(key)
+    nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
+    return aesgcm.decrypt(nonce, ciphertext, None)
+
+
 def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
@@ -63,14 +96,13 @@ def client_program(host, port, user):
     try:
         password = getpass.getpass("Please enter your password: ")
         ga_mod_p = generate_ga_mod_p(g, p) #send only ga_mod_p to the server
-        print(ga_mod_p, "yo dis ga_mod_p")
         W = hash_user_password(password)  # Hash the password to get W
 
         # Send sign-in message to the server including username, g^a mod p, and the port and ip of the client
         mes = {"type": "SIGN-IN", "username": user,"g^amodp":ga_mod_p, 'port': port, 'ip': host}
         send_message(client_socket, server_add, mes)
 
-        print("Please enter command:")
+        #print("Please enter command:")
 
         # While online
         while True:
@@ -79,26 +111,73 @@ def client_program(host, port, user):
             for sock in read_sockets:
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
-                    print(data)  # show in terminal remove this later
-                    response = json.loads(data)
-                    # Inside client_program, after receiving the SRP_RESPONSE message
-                    if response["type"] == "SRP_RESPONSE":
+                    if data:
                         try:
-                            # Parse the server's response
-                            B_received = int(response["g^b+g^W_mod_p"])
-                            u = int(response["u"])
-                            c_1 = int(response["c_1"])
-                            a = client_private_key_a
+                            response = json.loads(data)
+                            #print(response)  # Proper JSON response
+                            # Inside client_program, after receiving the SRP_RESPONSE message
+                            if response["type"] == "SRP_RESPONSE":
+                                try:
+                                    # Parse the server's response
+                                    B_received = int(response["g^b+g^W_mod_p"])
+                                    u = int(response["u"])
+                                    c_1 = int(response["c_1"])
+                                    a = client_private_key_a
 
-                            # Subtract g^W mod p from B received to get g^b mod p
-                            gW_mod_p = pow(g, W, p)
-                            B = (B_received - gW_mod_p + p) % p  # Add p to avoid negative result
+                                    # Subtract g^W mod p from B received to get g^b mod p
+                                    gW_mod_p = pow(g, W, p)
+                                    B = (B_received - gW_mod_p + p) % p  # Add p to avoid negative result
 
-                            # Now compute the shared key using the received values and the client's private 'a'
-                            K_client = compute_client_shared_key(B, g, p, client_private_key_a, u, password)
-                            print(K_client, "yo dis client side K")
-                        except Exception as e:
-                            print("Error computing shared key:", e)
+                                    # Now compute the shared key using the received values and the client's private 'a'
+                                    K_client = compute_client_shared_key(B, g, p, client_private_key_a, u, password)
+
+                                    #AES requires at least 16 bytes (128 bit) for the key, so we take the first 16 bytes of K_client          
+                                    K = derive_key(K_client) 
+                                    c_1_bytes = c_1.to_bytes((c_1.bit_length() + 7) // 8, 'big')
+                                    # Encrypt c_1 with the derived symmetric key
+                                    encrypted_c1 = encrypt_with_key(K, c_1_bytes)
+                                    # Client side: converting c_1 to bytes before encryption
+
+
+                                    # Generate a new nonce 'c_2'
+                                    c_2 = random.randint(1, 99999999)
+
+                                    # Prepare and send encrypted c_1 and c_2 to the server
+                                    auth_message = {
+                                        "type": "AUTH_MESSAGE",
+                                        "encrypted_c1": base64.b64encode(encrypted_c1).decode(),  # Include nonce with encrypted message
+                                        "c_2": c_2,
+                                    }
+                                    send_message(client_socket, server_add, auth_message)
+
+                                except Exception as e:
+                                    print("Error computing shared key:", e)
+
+
+                            if response["type"] == "AUTH_RESPONSE":
+                                # Decrypt encrypted_c2 received from server
+                                encrypted_c2_base64 = response["encrypted_c2"]
+                                encrypted_c2 = base64.b64decode(encrypted_c2_base64)
+                                
+                                try:
+                                    decrypted_c2 = decrypt_with_key(K, encrypted_c2)  # K is your derived key
+                                    decrypted_c2_int = int.from_bytes(decrypted_c2, byteorder='big')
+                                    
+                                    # Check if decrypted c_2 matches the one we sent
+                                    if decrypted_c2_int == c_2:
+                                        print("Log in successful!")
+                                    else:
+                                        print("Server authentication failed")
+                                        
+                                except Exception as e:
+                                    print("Error during decryption or authentication:", str(e))
+                            
+                            elif response["type"] == "error":
+                                print(response["message"])
+                        except json.JSONDecodeError:
+                            print("Received malformed data or not in JSON format.")
+                    else:
+                        print("Received empty response from server.")
   
                 elif sock == sys.stdin:
                     message = input("")  # take input
