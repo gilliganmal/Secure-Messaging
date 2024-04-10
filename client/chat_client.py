@@ -133,11 +133,10 @@ def client_program(host, port, user):
 
                                     #AES requires at least 16 bytes (128 bit) for the key, so we take the first 16 bytes of K_client          
                                     K = derive_key(K_client) 
+                                    # Client side: converting c_1 to bytes before encryption
                                     c_1_bytes = c_1.to_bytes((c_1.bit_length() + 7) // 8, 'big')
                                     # Encrypt c_1 with the derived symmetric key
                                     encrypted_c1 = encrypt_with_key(K, c_1_bytes)
-                                    # Client side: converting c_1 to bytes before encryption
-
 
                                     # Generate a new nonce 'c_2'
                                     c_2 = random.randint(1, 99999999)
@@ -174,6 +173,9 @@ def client_program(host, port, user):
                             
                             elif response["type"] == "error":
                                 print(response["message"])
+                                if (response["message"]) == "User not found" or (response["message"]) == "User verification failed":
+                                    user = input("Please enter your username: ")
+                                    client_program(host, port, user)
                         except json.JSONDecodeError:
                             print("Received malformed data or not in JSON format.")
                     else:

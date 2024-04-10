@@ -110,7 +110,12 @@ def store_user(data, address, conn):
     
     p = int(user_db['p'])
     g = int(user_db['g'])
-    verifier = int(user_db['users'][username]['verifier'])  # This is g^W mod p
+    try:
+        verifier = int(user_db['users'][username]['verifier'])  # This is g^W mod p
+    except KeyError:
+        message = {"type": "error", "message": "User not found"}         
+        conn.sendto(json.dumps(message).encode(), address)
+        return
 
     # Compute server response values
     gb_plus_gW_mod_p, b = compute_server_response(g, p, verifier)
@@ -165,7 +170,6 @@ def handle_auth_message(data, address, server_socket):
                 c_2_bytes = c_2.to_bytes((c_2.bit_length() + 7) // 8, 'big')
                 # Encrypt c_1 with the derived symmetric key
                 encrypted_c2 = encrypt_with_key(derived_key, c_2_bytes)
-                print(encrypted_c2, "encrypted_c2")
                 response = {
                     "type": "AUTH_RESPONSE",
                     "encrypted_c2": base64.b64encode(encrypted_c2).decode(),
