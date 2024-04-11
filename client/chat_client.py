@@ -182,6 +182,8 @@ def client_program(host, port, user):
                                     client_program(host, port, user)
                         if response["type"] == "GOODBYE":
                             print(response["message"])
+                            print("\nExiting the client.")
+                            sys.exit(0)
     
                                        
             # if login and sys.stdin in read_sockets:
