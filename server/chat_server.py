@@ -165,9 +165,10 @@ def handle_auth_message(data, address, server_socket):
             decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
             # Verify c_1 or perform necessary checks
             if c_1 != decrypted_c1_int:
-                message = {"type": "error", "message": "User verification failed"}         
+                message = {"type": "error", "message": "User verification failed for %s" + data[address]} 
+                data.pop(users[data[address]])
                 server_socket.sendto(json.dumps(message).encode(), address)
-
+                print('user removed\n')
             else:
                 # Encrypt c_2 received from the client to send back
                 c_2 = data['c_2']
@@ -181,7 +182,10 @@ def handle_auth_message(data, address, server_socket):
                 }
                 server_socket.sendto(json.dumps(response).encode(), address)
         except InvalidTag:
-            message = {"type": "error", "message": "User verification failed"}         
+            print(users)
+            message = {"type": "error", "message": "User verification failed"}
+            print(users[address]['username'] + " removed")
+            del users[address]       
             server_socket.sendto(json.dumps(message).encode(), address)
         
 
