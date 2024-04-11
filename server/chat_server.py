@@ -6,10 +6,13 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
+import time
+lockout_duration = 300  # Lockout duration in seconds
 
 # Dictionary to store user information
 users = {}
+failed_attempts = {}
+
 
 # Generate a random private key 'b'
 def generate_private_key():
@@ -142,7 +145,6 @@ def store_user(data, address, conn):
     
     flag = 0
     for key in users:
-        print(users[key]['username'])
         if users[key]['username'] == username:
             flag = 1
             message = {"type": "error", "message": "User already logged in"}   
@@ -157,7 +159,27 @@ def store_user(data, address, conn):
             }
         
     
+def check_fails(user):
+    print("checking fails")
+    if user in failed_attempts.keys():
+        failed_attempts[user] += 1
+        if failed_attempts[user] >= 3:
+            # Set lockout timestamp
+            failed_attempts[user] = time.time()
+    else:
+        failed_attempts[user] = 1
+    print(failed_attempts[user])
 
+def is_locked_out(user):
+    if user in failed_attempts.keys():
+        if failed_attempts[user] >= 3:
+            # Check if lockout duration has passed
+            if time.time() - failed_attempts[user] < lockout_duration:
+                return True
+            else:
+                # Reset failed attempts after lockout duration
+                del failed_attempts[user]
+    return False
 
 # handling for AUTH_MESSAGE type where the server received the cnrypted c_1 and c_2 from the client. The server needs to make
 # sure the c_1 is correct and then send back the encrypted c_2
@@ -176,28 +198,42 @@ def handle_auth_message(data, address, server_socket):
             decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
             # Verify c_1 or perform necessary checks
             if c_1 != decrypted_c1_int:
-                message = {"type": "error", "message": "User verification failed"} 
-                del users[address] 
-                server_socket.sendto(json.dumps(message).encode(), address)
-                print(users[address]['username'] + " removed")
+                if is_locked_out(users[address]['username']):
+                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
+                    server_socket.sendto(json.dumps(message).encode(), address)
+                else:
+                    message = {"type": "error", "message": "User verification failed"}
+                    check_fails(users[address]['username'])
+                    del users[address] 
+                    server_socket.sendto(json.dumps(message).encode(), address)
+                    print(users[address]['username'] + " removed")
             else:
-                # Encrypt c_2 received from the client to send back
-                c_2 = data['c_2']
-                # convert
-                c_2_bytes = c_2.to_bytes((c_2.bit_length() + 7) // 8, 'big')
-                # Encrypt c_1 with the derived symmetric key
-                encrypted_c2 = encrypt_with_key(derived_key, c_2_bytes)
-                response = {
-                    "type": "AUTH_RESPONSE",
-                    "encrypted_c2": base64.b64encode(encrypted_c2).decode(),
-                }
-                server_socket.sendto(json.dumps(response).encode(), address)
+                if is_locked_out(users[address]['username']):
+                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
+                    server_socket.sendto(json.dumps(message).encode(), address)
+                else:
+                    failed_attempts[users[address]['username']] = 0
+                    # Encrypt c_2 received from the client to send back
+                    c_2 = data['c_2']
+                    # convert
+                    c_2_bytes = c_2.to_bytes((c_2.bit_length() + 7) // 8, 'big')
+                    # Encrypt c_1 with the derived symmetric key
+                    encrypted_c2 = encrypt_with_key(derived_key, c_2_bytes)
+                    response = {
+                        "type": "AUTH_RESPONSE",
+                        "encrypted_c2": base64.b64encode(encrypted_c2).decode(),
+                    }
+                    server_socket.sendto(json.dumps(response).encode(), address)
         except InvalidTag:
-            print(users)
-            message = {"type": "error", "message": "User verification failed"}
-            print(users[address]['username'] + " removed")
-            del users[address]       
-            server_socket.sendto(json.dumps(message).encode(), address)
+            if is_locked_out(users[address]['username']):
+                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
+                    server_socket.sendto(json.dumps(message).encode(), address)
+            else:
+                message = {"type": "error", "message": "User verification failed"}
+                print(users[address]['username'] + " removed")
+                check_fails(users[address]['username'])
+                del users[address]       
+                server_socket.sendto(json.dumps(message).encode(), address)
         
 
 # lists all users currently online
