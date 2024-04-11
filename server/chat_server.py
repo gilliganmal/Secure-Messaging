@@ -221,12 +221,12 @@ def handle_auth_message(data, address, server_socket):
         K_server = users[address]["K_server"]
         c_1 = users[address]["c1"]
         # Derive AES key from K_server
-        derived_key = derive_key(K_server)
+        K = derive_key(K_server)
 
         try:
             # Decrypt encrypted_c1
             encrypted_c1 = base64.b64decode(data['encrypted_c1'])
-            decrypted_c1 = decrypt_with_key(derived_key, encrypted_c1)
+            decrypted_c1 = decrypt_with_key(K, encrypted_c1)
             # Convert decrypted_c1 from bytes to an integer
             decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
             # Verify c_1 or perform necessary checks
@@ -249,7 +249,7 @@ def handle_auth_message(data, address, server_socket):
                     # convert
                     c_2_bytes = c_2.to_bytes((c_2.bit_length() + 7) // 8, 'big')
                     # Encrypt c_1 with the derived symmetric key
-                    encrypted_c2 = encrypt_with_key(derived_key, c_2_bytes)
+                    encrypted_c2 = encrypt_with_key(K, c_2_bytes)
                     response = {
                         "type": "AUTH_RESPONSE",
                         "encrypted_c2": base64.b64encode(encrypted_c2).decode(),
