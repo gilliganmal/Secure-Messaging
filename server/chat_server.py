@@ -139,12 +139,23 @@ def store_user(data, address, conn):
     #Shared key
     # Compute shared key using gamodp from client, b and u from server, and verifier gWmodp from user's stored data
     K_server = compute_shared_key(gamodp, b, u, verifier, p)
+    
+    flag = 0
+    for key in users:
+        print(users[key]['username'])
+        if users[key]['username'] == username:
+            flag = 1
+            message = {"type": "error", "message": "User already logged in"}   
+            conn.sendto(json.dumps(message).encode(), address)
+            break
 
-    users[address] = {
-        "username": username,
-        "K_server": K_server,
-        "c1": c_1
-    }
+    if flag == 0:
+        users[address] = {
+            "username": username,
+            "K_server": K_server,
+            "c1": c_1
+            }
+        
     
 
 
@@ -165,10 +176,10 @@ def handle_auth_message(data, address, server_socket):
             decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
             # Verify c_1 or perform necessary checks
             if c_1 != decrypted_c1_int:
-                message = {"type": "error", "message": "User verification failed for %s" + data[address]} 
-                data.pop(users[data[address]])
+                message = {"type": "error", "message": "User verification failed"} 
+                del users[address] 
                 server_socket.sendto(json.dumps(message).encode(), address)
-                print('user removed\n')
+                print(users[address]['username'] + " removed")
             else:
                 # Encrypt c_2 received from the client to send back
                 c_2 = data['c_2']

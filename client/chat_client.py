@@ -170,7 +170,7 @@ def client_program(host, port, user):
                                 print("Error decrypting c_2:", e)
                         elif response["type"] == "error":
                             print(response["message"])
-                            if(response["message"]) == "User not found" or (response["message"]) == "User verification failed":
+                            if(response["message"]) == "User not found" or (response["message"]) == "User verification failed" or (response["message"] == 'User already logged in'):
                                     user = input("Please enter your username: ")
                                     client_program(host, port, user)
     
