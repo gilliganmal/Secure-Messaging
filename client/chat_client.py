@@ -107,7 +107,14 @@ def client_program(host, port, user):
         # While online
         while True:
             sockets_list = [sys.stdin, client_socket]
-            read_sockets, _, _ = select.select(sockets_list, [], [])  # monitor for read events
+            read_sockets, _, _ = select.select(sockets_list, [], [], 12)  # monitor for read events with timeout
+            if not read_sockets:
+                print("No data received from the server. Exiting.")
+                exit_message = {'type': 'exit', 'USERNAME': user}
+                send_message(client_socket, server_add, exit_message)
+                client_socket.close()
+                sys.exit(0)
+
             for sock in read_sockets:
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
@@ -170,9 +177,11 @@ def client_program(host, port, user):
                                 print("Error decrypting c_2:", e)
                         elif response["type"] == "error":
                             print(response["message"])
-                            if(response["message"]) == "User not found" or (response["message"]) == "User verification failed" or (response["message"] == 'User already logged in'):
+                            if(response["login"]) == "yes":
                                     user = input("Please enter your username: ")
                                     client_program(host, port, user)
+                        if response["type"] == "GOODBYE":
+                            print(response["message"])
     
                                        
             # if login and sys.stdin in read_sockets:

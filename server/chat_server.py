@@ -7,12 +7,18 @@ from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import time
+import sys
+import threading
 lockout_duration = 300  # Lockout duration in seconds
+
 
 # Dictionary to store user information
 users = {}
 failed_attempts = {}
 
+timeout_message = {"type": "error", 
+                   "message": "User temporarily locked out. Try again later.", 
+                   "login": "no"}
 
 # Generate a random private key 'b'
 def generate_private_key():
@@ -67,6 +73,16 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
     nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
     return aesgcm.decrypt(nonce, ciphertext, None)
 
+# Define a function to send check-in messages to clients
+def send_checkin_messages(server_socket):
+    while True:
+        # Iterate over connected clients and send check-in message
+        for addr in users.keys():
+            checkin_message = {"type": "CHECK-IN"}
+            server_socket.sendto(json.dumps(checkin_message).encode(), addr)
+        # Wait for 10 seconds before sending the next check-in message
+        time.sleep(10)
+
 
 # handles all server operations
 def server_program(port):
@@ -75,34 +91,48 @@ def server_program(port):
 
     print("Server Initialized...")
 
-    while True:
-        conn, address = server_socket.recvfrom(65535)  # accept new connection
+    # Start a thread to send check-in messages
+    checkin_thread = threading.Thread(target=send_checkin_messages, args=(server_socket,))
+    checkin_thread.daemon = True  # Daemonize the thread so it exits when the main program exits
+    checkin_thread.start()
 
-        # receive data stream. it won't accept data packet greater than 1024 bytes
-        data = json.loads(conn.decode())
-        print("from connected user: " + str(data))
-        type = data['type']
+    try:
+        while True:
+            conn, address = server_socket.recvfrom(65535)  # accept new connection
 
-        # branches based on what type of packet we received
-        if type == 'SIGN-IN':
-            store_user(data, address, server_socket)
-        if type == 'AUTH_MESSAGE':
-            handle_auth_message(data, address, server_socket)
-        elif type == 'list':
-            list_users(server_socket, address)
-        elif type == 'send':
-            send_message(data, server_socket, address)
-        elif type == 'exit':
-            user_to_remove = None
-            for addr, info in users.items():
-                if info["username"] == data['USERNAME']:
-                    user_to_remove = addr
-                    break
-            if user_to_remove:
-                users.pop(user_to_remove)
+            # receive data stream. it won't accept data packet greater than 1024 bytes
+            data = json.loads(conn.decode())
+            print("from connected user: " + str(data))
+            type = data['type']
+
+            # branches based on what type of packet we received
+            if type == 'SIGN-IN':
+                store_user(data, address, server_socket)
+            if type == 'AUTH_MESSAGE':
+                handle_auth_message(data, address, server_socket)
+            elif type == 'list':
+                list_users(server_socket, address)
+            elif type == 'send':
+                send_message(data, server_socket, address)
+            elif type == 'exit':
+                user_to_remove = None
+                for addr, info in users.items():
+                    if info["username"] == data['USERNAME']:
+                        user_to_remove = addr
+                        break
+                if user_to_remove:
+                    users.pop(user_to_remove)
         # else:
         #     message = {"type": "error", "message": "Invalid command"}         
         #     server_socket.sendto(json.dumps(message).encode(), address)
+    except KeyboardInterrupt:
+        # Send goodbye message to all connected clients
+        goodbye_message = {"type": "GOODBYE", "message": "Server is shutting down. Goodbye!"}
+        for addr in users.keys():
+            server_socket.sendto(json.dumps(goodbye_message).encode(), addr)
+        print("\nServer shutting down...")
+        server_socket.close()  # Close the server socket
+        sys.exit(0)  # Exit the program
             
             
 
@@ -121,7 +151,7 @@ def store_user(data, address, conn):
     try:
         verifier = int(user_db['users'][username]['verifier'])  # This is g^W mod p
     except KeyError:
-        message = {"type": "error", "message": "User not found"}         
+        message = {"type": "error", "message": "User not found", "login": "yes"}         
         conn.sendto(json.dumps(message).encode(), address)
         return
 
@@ -147,7 +177,7 @@ def store_user(data, address, conn):
     for key in users:
         if users[key]['username'] == username:
             flag = 1
-            message = {"type": "error", "message": "User already logged in"}   
+            message = {"type": "error", "message": "User already logged in", "login": "yes"}   
             conn.sendto(json.dumps(message).encode(), address)
             break
 
@@ -199,18 +229,16 @@ def handle_auth_message(data, address, server_socket):
             # Verify c_1 or perform necessary checks
             if c_1 != decrypted_c1_int:
                 if is_locked_out(users[address]['username']):
-                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
-                    server_socket.sendto(json.dumps(message).encode(), address)
+                    server_socket.sendto(json.dumps(timeout_message).encode(), address)
                 else:
-                    message = {"type": "error", "message": "User verification failed"}
+                    message = {"type": "error", "message": "User verification failed", "login": "yes"}
                     check_fails(users[address]['username'])
                     del users[address] 
                     server_socket.sendto(json.dumps(message).encode(), address)
                     print(users[address]['username'] + " removed")
             else:
                 if is_locked_out(users[address]['username']):
-                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
-                    server_socket.sendto(json.dumps(message).encode(), address)
+                    server_socket.sendto(json.dumps(timeout_message).encode(), address)
                 else:
                     failed_attempts[users[address]['username']] = 0
                     # Encrypt c_2 received from the client to send back
@@ -226,10 +254,9 @@ def handle_auth_message(data, address, server_socket):
                     server_socket.sendto(json.dumps(response).encode(), address)
         except InvalidTag:
             if is_locked_out(users[address]['username']):
-                    message = {"type": "error", "message": "User temporarily locked out. Try again later."}
-                    server_socket.sendto(json.dumps(message).encode(), address)
+                    server_socket.sendto(json.dumps(timeout_message).encode(), address)
             else:
-                message = {"type": "error", "message": "User verification failed"}
+                message = {"type": "error", "message": "User verification failed", "login": "yes"}
                 print(users[address]['username'] + " removed")
                 check_fails(users[address]['username'])
                 del users[address]       
