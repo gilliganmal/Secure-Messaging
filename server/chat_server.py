@@ -90,8 +90,13 @@ def server_program(port):
         elif type == 'send':
             send_message(data, server_socket, address)
         elif type == 'exit':
-            user = data['USERNAME']
-            users.pop(user, None)  # Remove user from the dictionary
+            user_to_remove = None
+            for addr, info in users.items():
+                if info["username"] == data['USERNAME']:
+                    user_to_remove = addr
+                    break
+            if user_to_remove:
+                users.pop(user_to_remove)
         # else:
         #     message = {"type": "error", "message": "Invalid command"}         
         #     server_socket.sendto(json.dumps(message).encode(), address)
@@ -138,7 +143,7 @@ def store_user(data, address, conn):
     users[address] = {
         "username": username,
         "K_server": K_server,
-        "c1": c_1  # Include c1 here for later verification
+        "c1": c_1
     }
     
 
@@ -182,7 +187,7 @@ def handle_auth_message(data, address, server_socket):
 
 # lists all users currently online
 def list_users(conn, address):
-    user_list = ", ".join(users.keys())
+    user_list = ", ".join(user_info["username"] for user_info in users.values())
     data = f"<- Signed In Users: {user_list}"
     conn.sendto(data.encode(), address)
 

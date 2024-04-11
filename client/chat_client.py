@@ -175,16 +175,21 @@ def client_program(host, port, user):
                                     client_program(host, port, user)
     
                                        
-            if login and sys.stdin in read_sockets:
-                message = input()
-                print("Please enter command:", message, end=' ')
-                sys.stdout.flush()
+            # if login and sys.stdin in read_sockets:
+            #     message = input()
+            #     print("Please enter command:", message, end=' ')
+            #     sys.stdout.flush()
+            #     if message:
+
+            # After receiving data or handling input
+            if login and (sock == sys.stdin):
+                message = input().strip()
                 if message:
                     cmd = message.split()
                     if cmd[0] == 'list':
                         send_message(client_socket, server_add, list_mes)  # send message
                         data = client_socket.recv(65535).decode()  # receive response
-                        print(data)  # show in terminal
+                        print("\n" + data, "\nPlease enter command: ", end='', flush=True)  # show in terminal
                     elif cmd[0] == 'send' and len(cmd) > 2:
                         to = cmd[1]
                         text = get_message(cmd)
@@ -198,6 +203,12 @@ def client_program(host, port, user):
                             addr = eval(load['ADDRESS'])
                             send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
                             client_socket.sendto(send_mes.encode(), addr)  # send to other client
+                    elif cmd[0] == 'exit':
+                        exit_message = {'type': 'exit', 'USERNAME': user}
+                        send_message(client_socket, server_add, exit_message)
+                        print("\nExiting the client.")
+                        client_socket.close()  # Close the socket
+                        sys.exit(0)  # Exit the program
                     else:
                         print("<- Please enter a valid command either 'list' or 'send'")
                         data = client_socket.recv(65535).decode()  # receive response
@@ -205,9 +216,11 @@ def client_program(host, port, user):
                 sys.stdout.flush()  # flush the buffer to ensure immediate display
 
     except KeyboardInterrupt:
-        exit_mes = {'type': 'exit', 'USERNAME': user}
-        send_message(client_socket, server_add, exit_mes)
+        exit_message = {'type': 'exit', 'USERNAME': user}
+        send_message(client_socket, server_add, exit_message)
         print("\nExiting the client.")
+        sys.exit(0)  # Ensure the client exits after sending the message
+
 
 def get_message(cmd):
     mes = ''
