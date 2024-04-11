@@ -142,6 +142,9 @@ def store_user(data, address, conn):
     username = data['username']
     gamodp = data['g^amodp']
 
+    if (is_locked_out(username)):
+        conn.sendto(json.dumps(timeout_message).encode(), address)
+        
     # Load server configuration and user database to get the p,g, and verifier of the user
     with open('users.json', 'r') as f:
         user_db = json.load(f)
