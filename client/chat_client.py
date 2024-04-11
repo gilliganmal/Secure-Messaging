@@ -92,6 +92,7 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
 def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
+    login = False
 
     try:
         password = getpass.getpass("Please enter your password: ")
@@ -102,7 +103,6 @@ def client_program(host, port, user):
         mes = {"type": "SIGN-IN", "username": user,"g^amodp":ga_mod_p, 'port': port, 'ip': host}
         send_message(client_socket, server_add, mes)
 
-        #print("Please enter command:")
 
         # While online
         while True:
@@ -112,105 +112,97 @@ def client_program(host, port, user):
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
                     if data:
-                        try:
-                            response = json.loads(data)
-                            #print(response)  # Proper JSON response
-                            # Inside client_program, after receiving the SRP_RESPONSE message
-                            if response["type"] == "SRP_RESPONSE":
-                                try:
-                                    # Parse the server's response
-                                    B_received = int(response["g^b+g^W_mod_p"])
-                                    u = int(response["u"])
-                                    c_1 = int(response["c_1"])
-                                    a = client_private_key_a
+                        response = json.loads(data)
+                        # Inside client_program, after receiving the SRP_RESPONSE message
+                        if response["type"] == "SRP_RESPONSE":
+                            try:
+                                # Parse the server's response
+                                B_received = int(response["g^b+g^W_mod_p"])
+                                u = int(response["u"])
+                                c_1 = int(response["c_1"])
+                                a = client_private_key_a
 
-                                    # Subtract g^W mod p from B received to get g^b mod p
-                                    gW_mod_p = pow(g, W, p)
-                                    B = (B_received - gW_mod_p + p) % p  # Add p to avoid negative result
+                                # Subtract g^W mod p from B received to get g^b mod p
+                                gW_mod_p = pow(g, W, p)
+                                B = (B_received - gW_mod_p + p) % p  # Add p to avoid negative result
 
-                                    # Now compute the shared key using the received values and the client's private 'a'
-                                    K_client = compute_client_shared_key(B, g, p, client_private_key_a, u, password)
+                                # Now compute the shared key using the received values and the client's private 'a'
+                                K_client = compute_client_shared_key(B, g, p, client_private_key_a, u, password)
 
-                                    #AES requires at least 16 bytes (128 bit) for the key, so we take the first 16 bytes of K_client          
-                                    K = derive_key(K_client) 
-                                    # Client side: converting c_1 to bytes before encryption
-                                    c_1_bytes = c_1.to_bytes((c_1.bit_length() + 7) // 8, 'big')
-                                    # Encrypt c_1 with the derived symmetric key
-                                    encrypted_c1 = encrypt_with_key(K, c_1_bytes)
+                                #AES requires at least 16 bytes (128 bit) for the key, so we take the first 16 bytes of K_client          
+                                K = derive_key(K_client) 
+                                # Client side: converting c_1 to bytes before encryption
+                                c_1_bytes = c_1.to_bytes((c_1.bit_length() + 7) // 8, 'big')
+                                # Encrypt c_1 with the derived symmetric key
+                                encrypted_c1 = encrypt_with_key(K, c_1_bytes)
 
-                                    # Generate a new nonce 'c_2'
-                                    c_2 = random.randint(1, 99999999)
+                                # Generate a new nonce 'c_2'
+                                c_2 = random.randint(1, 99999999)
 
-                                    # Prepare and send encrypted c_1 and c_2 to the server
-                                    auth_message = {
-                                        "type": "AUTH_MESSAGE",
-                                        "encrypted_c1": base64.b64encode(encrypted_c1).decode(),  # Include nonce with encrypted message
-                                        "c_2": c_2,
-                                    }
-                                    send_message(client_socket, server_add, auth_message)
+                                # Prepare and send encrypted c_1 and c_2 to the server
+                                auth_message = {
+                                    "type": "AUTH_MESSAGE",
+                                    "encrypted_c1": base64.b64encode(encrypted_c1).decode(),  # Include nonce with encrypted message
+                                    "c_2": c_2,
+                                }
+                                send_message(client_socket, server_add, auth_message)
 
-                                except Exception as e:
-                                    print("Error computing shared key:", e)
+                            except Exception as e:
+                                print("Error computing shared key:", e)
 
 
-                            if response["type"] == "AUTH_RESPONSE":
-                                # Decrypt encrypted_c2 received from server
-                                encrypted_c2_base64 = response["encrypted_c2"]
-                                encrypted_c2 = base64.b64decode(encrypted_c2_base64)
+                        if response["type"] == "AUTH_RESPONSE":
+                            # Decrypt encrypted_c2 received from server
+                            encrypted_c2_base64 = response["encrypted_c2"]
+                            encrypted_c2 = base64.b64decode(encrypted_c2_base64)
+
+                            try:  
+                                decrypted_c2 = decrypt_with_key(K, encrypted_c2)  # K is your derived key
+                                decrypted_c2_int = int.from_bytes(decrypted_c2, byteorder='big')
                                 
-                                try:
-                                    decrypted_c2 = decrypt_with_key(K, encrypted_c2)  # K is your derived key
-                                    decrypted_c2_int = int.from_bytes(decrypted_c2, byteorder='big')
-                                    
-                                    # Check if decrypted c_2 matches the one we sent
-                                    if decrypted_c2_int == c_2:
-                                        print("Log in successful!")
-                                    else:
-                                        print("Server authentication failed")
-                                        
-                                except Exception as e:
-                                    print("Error during decryption or authentication:", str(e))
-                            
-                            elif response["type"] == "error":
-                                print(response["message"])
-                                if (response["message"]) == "User not found" or (response["message"]) == "User verification failed":
+                                # Check if decrypted c_2 matches the one we sent
+                                if decrypted_c2_int == c_2:
+                                    login = True
+                                    print("Log in successful!\nPlease enter command: ", end=' ', flush=True)
+                                else:
+                                    print("Server authentication failed")
+                            except Exception as e:
+                                print("Error decrypting c_2:", e)
+                        elif response["type"] == "error":
+                            print(response["message"])
+                            if(response["message"]) == "User not found" or (response["message"]) == "User verification failed":
                                     user = input("Please enter your username: ")
                                     client_program(host, port, user)
-                        except json.JSONDecodeError:
-                            print("Received malformed data or not in JSON format.")
-                    else:
-                        print("Received empty response from server.")
-  
-                elif sock == sys.stdin:
-                    message = input("")  # take input
-                    cmd = message.split()  # split input
-                    try:
-                        if cmd[0] == 'list':
-                            send_message(client_socket, server_add, list_mes)  # send message
-                            data = client_socket.recv(65535).decode()  # receive response
-                            print(data)  # show in terminal
-                        elif cmd[0] == 'send':
-                            to = cmd[1]
-                            text = get_message(cmd)
-                            server_mes = {'type': 'send', 'USERNAME': to}
-                            send_message(client_socket, server_add, server_mes)
-                            data = client_socket.recv(65535).decode()  # receive ip and port from server
-
-                            load = json.loads(data)
-                            if load['ADDRESS'] == 'fail':
+    
+                                       
+            if login and sys.stdin in read_sockets:
+                message = input()
+                print("Please enter command:", message, end=' ')
+                sys.stdout.flush()
+                if message:
+                    cmd = message.split()
+                    if cmd[0] == 'list':
+                        send_message(client_socket, server_add, list_mes)  # send message
+                        data = client_socket.recv(65535).decode()  # receive response
+                        print(data)  # show in terminal
+                    elif cmd[0] == 'send' and len(cmd) > 2:
+                        to = cmd[1]
+                        text = get_message(cmd)
+                        server_mes = {'type': 'send', 'USERNAME': to}
+                        send_message(client_socket, server_add, server_mes)
+                        data = client_socket.recv(65535).decode()  # receive ip and port from server
+                        load = json.loads(data)
+                        if load['ADDRESS'] == 'fail':
                                 print(load['MES'])
-                            else:
-                                addr = eval(load['ADDRESS'])
-                                send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
-                                client_socket.sendto(send_mes.encode(), addr)  # send to other client
                         else:
-                            print("<- Please enter a valid command either 'list' or 'send'")
-                            data = client_socket.recv(65535).decode()  # receive response
-                            print(data)  # show in terminal
-                    except IndexError:
+                            addr = eval(load['ADDRESS'])
+                            send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
+                            client_socket.sendto(send_mes.encode(), addr)  # send to other client
+                    else:
                         print("<- Please enter a valid command either 'list' or 'send'")
-
-            sys.stdout.flush()  # flush the buffer to ensure immediate display
+                        data = client_socket.recv(65535).decode()  # receive response
+                        print(data)  # show in terminal
+                sys.stdout.flush()  # flush the buffer to ensure immediate display
 
     except KeyboardInterrupt:
         exit_mes = {'type': 'exit', 'USERNAME': user}
