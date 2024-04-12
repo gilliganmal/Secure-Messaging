@@ -119,6 +119,7 @@ def client_program(host, port, user):
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
                     if data:
+                        print(data)
                         response = json.loads(data)
                         # Inside client_program, after receiving the SRP_RESPONSE message
                         if response["type"] == "SRP_RESPONSE":
@@ -184,7 +185,7 @@ def client_program(host, port, user):
                                 exit(0)
                         if response["type"] == "GOODBYE":
                             print(response["message"])
-                            print("\nExiting the client.")
+                            print("\n" + response["message"])
                             exit(0)
     
                                        
@@ -213,7 +214,7 @@ def client_program(host, port, user):
                         if load['ADDRESS'] == 'fail':
                                 print(load['MES'])
                         else:
-                            addr = eval(load['ADDRESS'])
+                            addr = tuple(load['ADDRESS'])
                             send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
                             client_socket.sendto(send_mes.encode(), addr)  # send to other client
                     elif cmd[0] == 'exit':

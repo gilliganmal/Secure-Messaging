@@ -176,15 +176,11 @@ def store_user(data, address, conn):
     # Compute shared key using gamodp from client, b and u from server, and verifier gWmodp from user's stored data
     K_server = compute_shared_key(gamodp, b, u, verifier, p)
     
-    flag = 0
-    for key in users:
-        if users[key]['username'] == username:
-            flag = 1
-            message = {"type": "error", "message": "User already logged in", "login": "yes"}   
-            conn.sendto(json.dumps(message).encode(), address)
-            break
-
-    if flag == 0:
+    online = fetch_usernames()
+    if username in  online:
+        message = {"type": "error", "message": "User already logged in", "login": "yes"}   
+        conn.sendto(json.dumps(message).encode(), address)
+    else:
         users[address] = {
             "username": username,
             "K_server": K_server,
@@ -266,19 +262,31 @@ def handle_auth_message(data, address, server_socket):
                 server_socket.sendto(json.dumps(message).encode(), address)
         
 
+def fetch_usernames():
+    online = []
+    for key in users:
+        online.append(users[key]['username'])
+    return online
+
+
 # lists all users currently online
 def list_users(conn, address):
     user_list = ", ".join(user_info["username"] for user_info in users.values())
     data = f"<- Signed In Users: {user_list}"
     conn.sendto(data.encode(), address)
 
+def get_addr(username):
+    for key in users:
+        if users[key]['username'] == username:
+            return key
+
 # returns the address of the client requested 
 def send_message(data, conn, address):
     sendto = data['USERNAME']
-
+    online = fetch_usernames()
     # ensures the person being messaged is online
-    if sendto in users:
-        to_addr = users[sendto]['address']
+    if sendto in online:
+        to_addr = get_addr(sendto)
         message = {'ADDRESS': to_addr}
         conn.sendto(json.dumps(message).encode(), address)
     else:
