@@ -183,7 +183,7 @@ def client_program(host, port, user):
                             else:
                                 exit(0)
                         if response["type"] == "GOODBYE":
-                            print(response["message"])
+                            print("\n" + response["message"])
                             print("\nExiting the client.")
                             exit(0)
     
