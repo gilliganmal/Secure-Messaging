@@ -143,6 +143,7 @@ def client_program(host, port, user):
                     if data:
                         response = json.loads(data)
                         # Inside client_program, after receiving the SRP_RESPONSE message
+                        #print("response here " + str(response))
                         if response["type"] == "SRP_RESPONSE":
                             try:
                                 # Parse the server's response
@@ -212,6 +213,8 @@ def client_program(host, port, user):
 
                         elif response["type"] == "server_send":
                             try:
+                                #print("got to client")
+                                #print(response)
                                 encrypted_data_A = base64.b64decode(response["data"])
                                 decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A)
                                 decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
@@ -227,12 +230,22 @@ def client_program(host, port, user):
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
 
                                     # Now use recipient_tuple in sendto
-                                    client_socket.sendto(json.dumps(data_to_be_sent_to_recipient).encode(), recipient_tuple)
+                                    print("sending this .....")
+                                    print(data_to_be_sent_to_recipient)
+                                    whole_response = { "type": "client_send",
+                                                      "from": user,
+                                                      "message": data_to_be_sent_to_recipient
+                                    }
+                                    client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
                                 else:
                                     print("Invalid recipient address")
 
                             except Exception as e:
                                 print(f"Failed to process server_send data: {e}")
+                        elif response["type"] == "client_send":
+                            message = response["message"]
+                            from_user = response["from"]
+                            print("\n -> FROM %s: %s" % (from_user, message))
 ##START HERE 4/13
                         elif response["type"] == "shared_key":
                             # Decrypt the message 

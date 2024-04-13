@@ -340,6 +340,8 @@ def handle_send_message(data, address, server_socket):
                             "data": encrypted_messageA_base64,
                             "recipient_data": encrypted_messageB_base64
                         }
+                        print("got to server")
+                        print(message)
                         server_socket.sendto(json.dumps(message).encode('utf-8'), address)
                 except InvalidTag as e:
                     print("Decryption failed: InvalidTag", e)
