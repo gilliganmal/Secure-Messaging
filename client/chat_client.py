@@ -233,7 +233,7 @@ def client_program(host, port, user):
 
                             except Exception as e:
                                 print(f"Failed to process server_send data: {e}")
-
+##START HERE 4/13
                         elif response["type"] == "shared_key":
                             # Decrypt the message 
                             encrypted_data_B = base64.b64decode(response["recipient_data"])
@@ -242,7 +242,7 @@ def client_program(host, port, user):
                             decrypted_data_B = json.loads(decrypted_data_B_str)  # Parse string to JSON
 
                             shared_key_with_sender = decrypted_data_B["shared_key"]
-                            
+
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
