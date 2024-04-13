@@ -88,33 +88,38 @@ def send_checkin_messages(server_socket):
 def server_program(port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # get instance
     server_socket.bind(('127.0.0.1', port))
-
     print("Server Initialized...")
 
-    # Start a thread to send check-in messages
-    checkin_thread = threading.Thread(target=send_checkin_messages, args=(server_socket,))
-    checkin_thread.daemon = True  # Daemonize the thread so it exits when the main program exits
-    checkin_thread.start()
+    # # Start a thread to send check-in messages
+    # checkin_thread = threading.Thread(target=send_checkin_messages, args=(server_socket,))
+    # checkin_thread.daemon = True  
+    # checkin_thread.start()
 
     try:
         while True:
             conn, address = server_socket.recvfrom(65535)  # accept new connection
-
-            # receive data stream. it won't accept data packet greater than 1024 bytes
+            print(f"Received connection from {address}, type: {type(address)}")  # Correct logging
             data = json.loads(conn.decode())
+            print(f"Data from {address}: {data}")  # Correctly associate data with source address
+            
             print("from connected user: " + str(data))
-            type = data['type']
+            message_type = data['type']
 
             # branches based on what type of packet we received
-            if type == 'SIGN-IN':
+            if message_type == 'SIGN-IN':
                 store_user(data, address, server_socket)
-            if type == 'AUTH_MESSAGE':
+            if message_type == 'AUTH_MESSAGE':
                 handle_auth_message(data, address, server_socket)
-            elif type == 'list':
+            elif message_type == 'list':
                 list_users(server_socket, address)
-            elif type == 'send':
-                send_message(data, server_socket, address)
-            elif type == 'exit':
+            elif message_type == 'SEND':
+                print(f"Received SEND from {address}, message: {data}")
+                print(f"Current users: {users}")
+                if address not in users:
+                    print(f"Address {address} not found in users dict.")
+                else:
+                     handle_send_message(data, address)
+            elif message_type == 'exit':
                 user_to_remove = None
                 for addr, info in users.items():
                     if info["username"] == data['USERNAME']:
@@ -176,15 +181,11 @@ def store_user(data, address, conn):
     # Compute shared key using gamodp from client, b and u from server, and verifier gWmodp from user's stored data
     K_server = compute_shared_key(gamodp, b, u, verifier, p)
     
-    flag = 0
-    for key in users:
-        if users[key]['username'] == username:
-            flag = 1
-            message = {"type": "error", "message": "User already logged in", "login": "yes"}   
-            conn.sendto(json.dumps(message).encode(), address)
-            break
-
-    if flag == 0:
+    online = fetch_usernames()
+    if username in  online:
+        message = {"type": "error", "message": "User already logged in", "login": "yes"}   
+        conn.sendto(json.dumps(message).encode(), address)
+    else:
         users[address] = {
             "username": username,
             "K_server": K_server,
@@ -202,6 +203,7 @@ def check_fails(user):
     else:
         failed_attempts[user] = 1
     print(failed_attempts[user])
+
 
 def is_locked_out(user):
     if user in failed_attempts.keys():
@@ -266,24 +268,62 @@ def handle_auth_message(data, address, server_socket):
                 server_socket.sendto(json.dumps(message).encode(), address)
         
 
+def fetch_usernames():
+    online = []
+    for key in users:
+        online.append(users[key]['username'])
+    return online
+
+
 # lists all users currently online
 def list_users(conn, address):
     user_list = ", ".join(user_info["username"] for user_info in users.values())
     data = f"<- Signed In Users: {user_list}"
     conn.sendto(data.encode(), address)
 
-# returns the address of the client requested 
-def send_message(data, conn, address):
-    sendto = data['USERNAME']
+def get_addr(username):
+    for key in users:
+        if users[key]['username'] == username:
+            return key
+        
+# Function to handle sending messages between clientsif message['type'] == 'SEND':
+def handle_send_message(data, address):
+            # Check if address is in users
+            if address in users:
+                # Retrieve the shared key
+                K_server = users[address]['K_server']
+                # Derive AES key from K_server
+                K = derive_key(K_server)
+                print(K, "server side key")                
+                try:
+                    # Decrypt the message
+                    encrypted_data_with_nonce = base64.b64decode(data['data'])
+                    decrypted_data = decrypt_with_key(K, encrypted_data_with_nonce)
+                    decrypted_message = json.loads(decrypted_data.decode('utf-8'))
+                    from_user = decrypted_message['from']
+                    to_user = decrypted_message['to']
+                    message_data = decrypted_message['message']
+                    nonce = decrypted_message['nonce']                 
+                    # You should now have the decrypted message
+                    print(f"{from_user} wants to send a message to {to_user}: {message_data} with nonce {nonce}")
 
-    # ensures the person being messaged is online
-    if sendto in users:
-        to_addr = users[sendto]['address']
-        message = {'ADDRESS': to_addr}
-        conn.sendto(json.dumps(message).encode(), address)
-    else:
-        message = {'ADDRESS': 'fail', 'MES': "<- The Person who you are trying to message is not online"}
-        conn.sendto(json.dumps(message).encode(), address)
+                    # Send back two encrypted messages
+                        # The first one encrypted using the shared key with the from user consisting of
+                            # the nonce
+                            # a new shared key between the from user and to user,
+                            # the address of the to user 
+                        # The second one encrypted using the shared key with the to user consisting of
+                            # the nonce
+                            # the new shared key between the from user and to user
+
+                            
+                    
+                    ecipient_address = get_addr(decrypted_message['to'])
+                        # server_socket.sendto(data, recipient_address)
+                except InvalidTag as e:
+                    print("Decryption failed: InvalidTag", e)
+                except Exception as e:
+                    print("An error occurred:", e)
 
 if __name__ == '__main__':
     count = 0

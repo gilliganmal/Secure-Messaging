@@ -88,7 +88,30 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
     nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
     return aesgcm.decrypt(nonce, ciphertext, None)
 
+# Function to handle 'send' command
+def handle_send_command(to_username, message_text, K, client_socket, server_address):
+    nonce = random.randint(1, 99999999)  # Generate a random nonce
+    # Create the message dictionary
+    message_dict = {
+        'from': user,
+        'to': to_username,
+        'message': message_text,
+        'nonce': nonce
+    }
+    # Convert dictionary to JSON and encode to bytes
+    message_bytes = json.dumps(message_dict).encode('utf-8')
+    # Encrypt the message with the shared key
+    print(K, "client side key")
+    encrypted_message = encrypt_with_key(K, message_bytes)
+    # Create a message envelope
+    send_message_dict = {
+        'type': 'SEND',
+        'data': base64.b64encode(encrypted_message).decode('utf-8')  # Encode encrypted data to base64 for transmission
+    }
+    # Send the encrypted message to the server
+    send_message(client_socket, server_address, send_message_dict)
 
+K = None #global variable to hold the derived shared key with server
 def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
@@ -184,10 +207,8 @@ def client_program(host, port, user):
                                 exit(0)
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])
-                            print("\nExiting the client.")
-                            exit(0)
-    
-                                       
+                            print("\nExiting the client.")    
+                            exit(0)                                 
             # if login and sys.stdin in read_sockets:
             #     message = input()
             #     print("Please enter command:", message, end=' ')
@@ -203,19 +224,25 @@ def client_program(host, port, user):
                         send_message(client_socket, server_add, list_mes)  # send message
                         data = client_socket.recv(65535).decode()  # receive response
                         print("\n" + data, "\nPlease enter command: ", end='', flush=True)  # show in terminal
-                    elif cmd[0] == 'send' and len(cmd) > 2:
-                        to = cmd[1]
-                        text = get_message(cmd)
-                        server_mes = {'type': 'send', 'USERNAME': to}
-                        send_message(client_socket, server_add, server_mes)
-                        data = client_socket.recv(65535).decode()  # receive ip and port from server
-                        load = json.loads(data)
-                        if load['ADDRESS'] == 'fail':
-                                print(load['MES'])
-                        else:
-                            addr = eval(load['ADDRESS'])
-                            send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
-                            client_socket.sendto(send_mes.encode(), addr)  # send to other client
+                    # elif cmd[0] == 'send' and len(cmd) > 2:
+                    #     to = cmd[1]
+                    #     text = get_message(cmd)
+                    #     server_mes = {'type': 'send', 'USERNAME': to}
+                    #     send_message(client_socket, server_add, server_mes)
+                    #     data = client_socket.recv(65535).decode()  # receive ip and port from server
+                    #     load = json.loads(data)
+                    #     if load['ADDRESS'] == 'fail':
+                    #             print("\n" + load['MES'], "\nPlease enter command: ", end='', flush=True) 
+                    #     else:
+                    #         addr = tuple(load['ADDRESS'])
+                    #         send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
+                    #         client_socket.sendto(send_mes.encode(), addr)  # send to other client
+                    elif cmd[0] == 'send' and len(cmd) >= 3:
+                        # Extract the username to send to and the message text
+                        to_username = cmd[1]
+                        message_text = ' '.join(cmd[2:])
+                        # Call the new function to handle the send command
+                        handle_send_command(to_username, message_text, K, client_socket, server_add)
                     elif cmd[0] == 'exit':
                         exit_message = {'type': 'exit', 'USERNAME': user}
                         send_message(client_socket, server_add, exit_message)
