@@ -204,20 +204,49 @@ def client_program(host, port, user):
                                     client_program(host, port, user)
                             else:
                                 exit(0)
-                        elif response["type"] == "encrypted":
+                        elif response["type"] == "user_offline":
                             # Decrypt the message from the server
                             encrypted_data = base64.b64decode(response["message"])
                             decrypted_data = decrypt_with_key(K, encrypted_data)
-                            print("\n<- " + decrypted_data.decode('utf-8'), "\nPlease enter command: ", end=' ', flush=True)      
+                            print("\n<- " + decrypted_data.decode('utf-8'), "\nPlease enter command: ", end=' ', flush=True)
+
+                        elif response["type"] == "server_send":
+                            try:
+                                encrypted_data_A = base64.b64decode(response["data"])
+                                decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A)
+                                decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
+                                decrypted_data_A = json.loads(decrypted_data_A_str)
+
+                                recipient_address = decrypted_data_A["to_address"]
+                                shared_key_with_recipient = decrypted_data_A["shared_key"]
+                                verify_nonce = decrypted_data_A["nonce"]
+                                data_to_be_sent_to_recipient = response["recipient_data"]
+
+                                # Convert recipient_address from list to tuple and use it
+                                if recipient_address:
+                                    recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
+
+                                    # Now use recipient_tuple in sendto
+                                    client_socket.sendto(json.dumps(data_to_be_sent_to_recipient).encode(), recipient_tuple)
+                                else:
+                                    print("Invalid recipient address")
+
+                            except Exception as e:
+                                print(f"Failed to process server_send data: {e}")
+
+                        elif response["type"] == "shared_key":
+                            # Decrypt the message 
+                            encrypted_data_B = base64.b64decode(response["recipient_data"])
+                            decrypted_data_B_bytes = decrypt_with_key(K, encrypted_data_B)
+                            decrypted_data_B_str = decrypted_data_B_bytes.decode('utf-8')  # Convert bytes to string
+                            decrypted_data_B = json.loads(decrypted_data_B_str)  # Parse string to JSON
+
+                            shared_key_with_sender = decrypted_data_B["shared_key"]
+                            
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
                             exit(0)                                 
-            # if login and sys.stdin in read_sockets:
-            #     message = input()
-            #     print("Please enter command:", message, end=' ')
-            #     sys.stdout.flush()
-            #     if message:
 
             # After receiving data or handling input
             if login and (sock == sys.stdin):
@@ -228,19 +257,6 @@ def client_program(host, port, user):
                         send_message(client_socket, server_add, list_mes)  # send message
                         data = client_socket.recv(65535).decode()  # receive response
                         print("\n" + data, "\nPlease enter command: ", end='', flush=True)  # show in terminal
-                    # elif cmd[0] == 'send' and len(cmd) > 2:
-                    #     to = cmd[1]
-                    #     text = get_message(cmd)
-                    #     server_mes = {'type': 'send', 'USERNAME': to}
-                    #     send_message(client_socket, server_add, server_mes)
-                    #     data = client_socket.recv(65535).decode()  # receive ip and port from server
-                    #     load = json.loads(data)
-                    #     if load['ADDRESS'] == 'fail':
-                    #             print("\n" + load['MES'], "\nPlease enter command: ", end='', flush=True) 
-                    #     else:
-                    #         addr = tuple(load['ADDRESS'])
-                    #         send_mes = "<- <From %s:%s:%s>: %s" % (addr, port, user, text)
-                    #         client_socket.sendto(send_mes.encode(), addr)  # send to other client
                     elif cmd[0] == 'send' and len(cmd) >= 3:
                         # Extract the username to send to and the message text
                         to_username = cmd[1]
