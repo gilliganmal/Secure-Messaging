@@ -230,10 +230,12 @@ def client_program(host, port, user):
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
 
                                     # Now use recipient_tuple in sendto
-                                    print("sending this .....")
-                                    print(data_to_be_sent_to_recipient)
+                                    #print("sending this .....")
+                                    #print(data_to_be_sent_to_recipient)
                                     whole_response = { "type": "client_send",
                                                       "from": user,
+                                                      "shared": shared_key_with_recipient,
+                                                      "verifier": verify_nonce,
                                                       "message": data_to_be_sent_to_recipient
                                     }
                                     client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
@@ -244,6 +246,8 @@ def client_program(host, port, user):
                                 print(f"Failed to process server_send data: {e}")
                         elif response["type"] == "client_send":
                             message = response["message"]
+                            shared_key = response["shared"]
+                            verifier = response["verifier"]
                             from_user = response["from"]
                             print("\n -> FROM %s: %s" % (from_user, message))
 ##START HERE 4/13
