@@ -101,7 +101,6 @@ def handle_send_command(to_username, message_text, K, client_socket, server_addr
     # Convert dictionary to JSON and encode to bytes
     message_bytes = json.dumps(message_dict).encode('utf-8')
     # Encrypt the message with the shared key
-    print(K, "client side key")
     encrypted_message = encrypt_with_key(K, message_bytes)
     # Create a message envelope
     send_message_dict = {
@@ -205,6 +204,11 @@ def client_program(host, port, user):
                                     client_program(host, port, user)
                             else:
                                 exit(0)
+                        elif response["type"] == "encrypted":
+                            # Decrypt the message from the server
+                            encrypted_data = base64.b64decode(response["message"])
+                            decrypted_data = decrypt_with_key(K, encrypted_data)
+                            print("\n<- " + decrypted_data.decode('utf-8'), "\nPlease enter command: ", end=' ', flush=True)      
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    

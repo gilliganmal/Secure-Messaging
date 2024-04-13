@@ -90,10 +90,10 @@ def server_program(port):
     server_socket.bind(('127.0.0.1', port))
     print("Server Initialized...")
 
-    # # Start a thread to send check-in messages
-    # checkin_thread = threading.Thread(target=send_checkin_messages, args=(server_socket,))
-    # checkin_thread.daemon = True  
-    # checkin_thread.start()
+    # Start a thread to send check-in messages
+    checkin_thread = threading.Thread(target=send_checkin_messages, args=(server_socket,))
+    checkin_thread.daemon = True  
+    checkin_thread.start()
 
     try:
         while True:
@@ -118,7 +118,7 @@ def server_program(port):
                 if address not in users:
                     print(f"Address {address} not found in users dict.")
                 else:
-                     handle_send_message(data, address)
+                     handle_send_message(data, address, server_socket)
             elif message_type == 'exit':
                 user_to_remove = None
                 for addr, info in users.items():
@@ -127,9 +127,6 @@ def server_program(port):
                         break
                 if user_to_remove:
                     users.pop(user_to_remove)
-        # else:
-        #     message = {"type": "error", "message": "Invalid command"}         
-        #     server_socket.sendto(json.dumps(message).encode(), address)
     except KeyboardInterrupt:
         # Send goodbye message to all connected clients
         goodbye_message = {"type": "GOODBYE", "message": "Server is shutting down. Goodbye!"}
@@ -138,8 +135,7 @@ def server_program(port):
         print("\nServer shutting down...")
         server_socket.close()  # Close the server socket
         sys.exit(0)  # Exit the program
-            
-            
+                       
 
 
 # after a user logs in save their data to places it can be accessed later
@@ -287,14 +283,13 @@ def get_addr(username):
             return key
         
 # Function to handle sending messages between clientsif message['type'] == 'SEND':
-def handle_send_message(data, address):
+def handle_send_message(data, address, server_socket):
             # Check if address is in users
             if address in users:
                 # Retrieve the shared key
                 K_server = users[address]['K_server']
                 # Derive AES key from K_server
-                K = derive_key(K_server)
-                print(K, "server side key")                
+                K = derive_key(K_server)             
                 try:
                     # Decrypt the message
                     encrypted_data_with_nonce = base64.b64decode(data['data'])
@@ -305,7 +300,52 @@ def handle_send_message(data, address):
                     message_data = decrypted_message['message']
                     nonce = decrypted_message['nonce']                 
                     # You should now have the decrypted message
-                    print(f"{from_user} wants to send a message to {to_user}: {message_data} with nonce {nonce}")
+                    print(f"{from_user} wants to send a message to {to_user}: {message_data}")
+
+                    recipient_address = get_addr(to_user)
+                    if recipient_address not in users:
+                        error_message = "User offline or cannot be reached. Try again later."
+                        error_message_bytes = error_message.encode('utf-8')
+                        encrypted_error_message = encrypt_with_key(K, error_message_bytes)
+                        error_response = {"type": "encrypted", "message": base64.b64encode(encrypted_error_message).decode('utf-8')}                 
+                        # Encrypt with the shared key
+                        server_socket.sendto(json.dumps(error_response).encode(), address)
+                    # else:
+                    #     # Generate a new shared key between the two users
+                    #     shared_key_KAB = generate_private_key()
+                    #     # Encrypt the new shared key with the shared key between the server and the from user
+                    #     encrypted_shared_key_from = encrypt_with_key(K, new_shared_key.to_bytes((new_shared_key.bit_length() + 7) // 8, 'big'))
+                    #     # Encrypt the new shared key with the shared key between the server and the to user
+                    #     K_to = users[recipient_address]['K_server']
+                    #     K_to_bytes = derive_key(K_to)
+                    #     encrypted_shared_key_to = encrypt_with_key(K_to_bytes, new_shared_key.to_bytes((new_shared_key.bit_length() + 7) // 8, 'big'))
+                    #     # Send back two encrypted messages
+                    #     # The first one encrypted using the shared key with the from user consisting of
+                    #     # the nonce
+                    #     # a new shared key between the from user and to user,
+                    #     # the address of the to user
+                    #     message1 = {
+                    #         "type": "MESSAGE",
+                    #         "nonce": nonce,
+                    #         "shared_key": encrypted_shared_key_from,
+                    #         "to_address": recipient_address
+                    #     }
+                    #     message1_bytes = json.dumps(message1).encode()
+                    #     encrypted_message1 = encrypt_with_key(K, message1_bytes)
+                    #     server_socket.sendto(encrypted_message1, address)
+                    #     # The second one encrypted using the shared key with the to user consisting of
+                    #     # the nonce
+                    #     # the new shared key between the from user and to user
+                    #     message2 = {
+                    #         "type": "MESSAGE",
+                    #         "nonce": nonce,
+                    #         "shared_key": encrypted_shared_key_to
+                    #     }
+                    #     message2_bytes = json.dumps(message2).encode()
+                    #     encrypted_message2 = encrypt_with_key(K_to_bytes, message2_bytes)
+                    #     server_socket.sendto(encrypted_message2, recipient_address)
+    
+        
 
                     # Send back two encrypted messages
                         # The first one encrypted using the shared key with the from user consisting of
@@ -315,11 +355,10 @@ def handle_send_message(data, address):
                         # The second one encrypted using the shared key with the to user consisting of
                             # the nonce
                             # the new shared key between the from user and to user
-
+                            # server_socket.sendto(data, recipient_address)
                             
                     
-                    ecipient_address = get_addr(decrypted_message['to'])
-                        # server_socket.sendto(data, recipient_address)
+    
                 except InvalidTag as e:
                     print("Decryption failed: InvalidTag", e)
                 except Exception as e:
