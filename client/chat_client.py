@@ -213,8 +213,6 @@ def client_program(host, port, user):
 
                         elif response["type"] == "server_send":
                             try:
-                                #print("got to client")
-                                #print(response)
                                 encrypted_data_A = base64.b64decode(response["data"])
                                 decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A)
                                 decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
@@ -336,6 +334,8 @@ def client_program(host, port, user):
         sys.exit(0)  # Ensure the client exits after sending the message
 
 
+# gets the whole message as opposed to one word
+# IDK IF WE STILL NEED THIS
 def get_message(cmd):
     mes = ''
     length = len(cmd)

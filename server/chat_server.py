@@ -189,6 +189,8 @@ def store_user(data, address, conn):
             }
         
     
+# Updates running count if password is incorrect
+# starts 5 minute lockout 
 def check_fails(user):
     print("checking fails")
     if user in failed_attempts.keys():
@@ -201,6 +203,7 @@ def check_fails(user):
     print(failed_attempts[user])
 
 
+# determines if a user is currently locked out
 def is_locked_out(user):
     if user in failed_attempts.keys():
         if failed_attempts[user] >= 3:
@@ -212,8 +215,8 @@ def is_locked_out(user):
                 del failed_attempts[user]
     return False
 
-# handling for AUTH_MESSAGE type where the server received the cnrypted c_1 and c_2 from the client. The server needs to make
-# sure the c_1 is correct and then send back the encrypted c_2
+# handling for AUTH_MESSAGE type where the server received the cnrypted c_1 and c_2 from the client.
+# The server needs to make sure the c_1 is correct and then send back the encrypted c_2
 def handle_auth_message(data, address, server_socket):
     if address in users:
         K_server = users[address]["K_server"]
@@ -232,15 +235,12 @@ def handle_auth_message(data, address, server_socket):
                 if is_locked_out(users[address]['username']):
                     server_socket.sendto(json.dumps(timeout_message).encode(), address)
                 else:
-                    message = {"type": "error", "message": "User verification failed", "login": "yes"}
-                    check_fails(users[address]['username'])
-                    del users[address] 
-                    server_socket.sendto(json.dumps(message).encode(), address)
-                    print(users[address]['username'] + " removed")
+                    failed_auth(address, server_socket)
             else:
                 if is_locked_out(users[address]['username']):
                     server_socket.sendto(json.dumps(timeout_message).encode(), address)
                 else:
+                    # reset failed attemps upon succesful login
                     failed_attempts[users[address]['username']] = 0
                     # Encrypt c_2 received from the client to send back
                     c_2 = data['c_2']
@@ -257,18 +257,22 @@ def handle_auth_message(data, address, server_socket):
             if is_locked_out(users[address]['username']):
                     server_socket.sendto(json.dumps(timeout_message).encode(), address)
             else:
-                message = {"type": "error", "message": "User verification failed", "login": "yes"}
-                print(users[address]['username'] + " removed")
-                check_fails(users[address]['username'])
-                del users[address]       
-                server_socket.sendto(json.dumps(message).encode(), address)
+                failed_auth(address, server_socket)
         
-
+# returns all currently logged in users
 def fetch_usernames():
     online = []
     for key in users:
         online.append(users[key]['username'])
     return online
+
+# path if user validation fails
+def failed_auth(address, server_socket):
+    message = {"type": "error", "message": "User verification failed", "login": "yes"}
+    check_fails(users[address]['username'])
+    del users[address] 
+    server_socket.sendto(json.dumps(message).encode(), address)
+    print(users[address]['username'] + " removed")
 
 
 # lists all users currently online
@@ -352,7 +356,10 @@ if __name__ == '__main__':
     count = 0
     while count < 3:
         check = getpass.getpass("Enter Password: ")
-        if check == "admin":
+        check = base64.b64encode(check.encode("utf-8"))
+        check = str(check)
+        check = base64.a85encode(check.encode("utf-8"))
+        if check == b'@OG;[;KQ>K1d*2':
             print("You have successfully logged in as admin\n")
             parser = argparse.ArgumentParser(usage="./chat_server <-sp port>")
             parser.add_argument('-sp', type=int, required=False, dest='port')
