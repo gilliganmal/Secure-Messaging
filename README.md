@@ -16,7 +16,8 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 2. Navigate to the server directory: `cd server`
 3. Install dependencies: install the 'cryptography' library with pip/brew/apt
 4. Start the server: `./chat_server <-sp port>`
-     -sp indicates the port you want the program to run on. the program automatically runs on the users localhost
+
+        -sp indicates the port you want the program to run on. the program automatically runs on the users localhost
 6. Enter in server password
 7. If sucessfully connected you will see "Server Initialized..." in your terminal interface
 
