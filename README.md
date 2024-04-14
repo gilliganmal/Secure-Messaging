@@ -35,7 +35,7 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 - **Username**: bob | **Password**: bobpassword
 - **Username**: alice | **Password**: alicepassword
 - **Username**: aishu | **Password**: aishupassword
-- - **Username**: mallory | **Password**: mallorypassword
+- **Username**: mallory | **Password**: mallorypassword
 
 ## Design Slides
 
