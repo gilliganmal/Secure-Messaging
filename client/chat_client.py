@@ -259,6 +259,7 @@ def client_program(host, port, user):
                             decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2)
                         #decrypted_nonce_2_str = decrypted_nonce_2_bytes.decode('utf-8') ##problem
                             decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
+                            print(decrypted_nonce_2, "decrypted nonce 2")
 
                             nonce_2minus1 = decrypted_nonce_2 - 1
                             nonce_2minus1_bytes = nonce_2minus1.to_bytes((nonce_2minus1.bit_length() + 7) // 8, 'big')
