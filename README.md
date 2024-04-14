@@ -1,6 +1,8 @@
 # Secure Messaging Application
 Aishwarya Vinod, Mallory Gilligan
 
+A project for CY4740 Network Security at Northeastern Univeristy
+
 ## Description
 
 This application provides a cryptographically secure way to message your friends!
