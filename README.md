@@ -60,9 +60,10 @@ The client application provides three main commands:
    ```
 
    Replace `<user>` with the user you want to send your message to.
+   
    Replace `<message>` with the content you want to send.
 
-3. **exit**: This command terminates the client application and closes the connection to the server.
+4. **exit**: This command terminates the client application and closes the connection to the server.
 
    Example usage:
    ```
