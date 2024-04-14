@@ -20,7 +20,7 @@ def send_message(client_socket, server_address, message):
     client_socket.sendto(json.dumps(message).encode(), server_address)
 
 
-# Assume p and g are constants known beforehand (this would be received securely or pre-shared in the real world)
+# Assume p and g are constants known beforehand (this would be received securely pre-shared and stored in the real world)
 # Correct assignment without a trailing comma
 p = 26657706621716543356427660489753514568662248287693517583871421471277927394226182218864396868351146221417642314586344696182785804683203615900459253350532133763424792102545316816104252762334972148348580296625704810361300497179705481131533770686041768384955576685725315981437137175593884768188705226027006595344505706524592489783446723617919991220927789085885301742953663221415782700415596054304650368202029917453579747975511696459512765650159731430161128908423206364785585445059168667792411307712050519651610778186819509309072269879529014542271328260308499119722195522566171386824542462872262334173649010497446756146287
 g = 2
@@ -60,7 +60,7 @@ def compute_client_shared_key(B, g, p, a, u, password):
     return K
 
 
-# Derive a 256-bit key from K_client
+# Derive a 256-bit key K_client
 def derive_key(K_client):
     # Convert K_client to bytes
     K_client_bytes = K_client.to_bytes((K_client.bit_length() + 7) // 8, byteorder="big")
@@ -89,13 +89,14 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
     return aesgcm.decrypt(nonce, ciphertext, None)
 
 # Function to handle 'send' command
-def handle_send_command(to_username, message_text, K, client_socket, server_address):
+def handle_send_command(to_username, K, client_socket, server_address):
     nonce_1 = random.randint(1, 99999999)  # Generate a random nonce
+    global last_sent_nonce_1  # since we are using this variable outside this function
+    last_sent_nonce_1 = nonce_1  # Store the last sent nonce for verification
     # Create the message dictionary
     message_dict = {
         'from': user,
         'to': to_username,
-        'message': message_text,
         'nonce_1': nonce_1
     }
     # Convert dictionary to JSON and encode to bytes
@@ -215,27 +216,38 @@ def client_program(host, port, user):
                             try:
                                 encrypted_data_A = base64.b64decode(response["data"])
                                 decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A)
+                                print("1")
                                 decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
                                 decrypted_data_A = json.loads(decrypted_data_A_str)
 
+
                                 recipient_address = decrypted_data_A["to_address"]
-                                shared_key_with_recipient = decrypted_data_A["shared_key"]
-                                shared_key = derive_key(shared_key_with_recipient)
+                                shared_key_AB = decrypted_data_A["shared_key"]
+                                shared_key = derive_key(shared_key_AB)
                                 print(shared_key, "shared key")
+
                                 verify_nonce_1 = decrypted_data_A["nonce_1"]
-                                data_to_be_sent_to_recipient = response["recipient_data"]
+                                if verify_nonce_1 != last_sent_nonce_1:
+                                    print("Nonce verification failed. Server cannot be trusted.")
+                                    sys.exit(0)
+                                data_to_be_sent_to_recipient = decrypted_data_A["ticket_to_B"]
+
 
                                 # Convert recipient_address from list to tuple and use it
                                 if recipient_address:
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
 
                                     nonce_2 = random.randint(1, 99999999)
+                                    global last_nonce_2
+                                    last_nonce_2 = nonce_2
                                     nonce_2_bytes = nonce_2.to_bytes((nonce_2.bit_length() + 7) // 8, 'big')
                                     encrypted_nonce_2 = encrypt_with_key(shared_key, nonce_2_bytes)
                                     whole_response = { "type": "shared_key",
+                                                      "from_user": user,
                                                       "recipient_data": data_to_be_sent_to_recipient,
                                                       "nonce_2": base64.b64encode(encrypted_nonce_2).decode()
                                     }
+                                    print(nonce_2, "nonce 2 sent by client A")
                                     client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
                                 else:
                                     print("Invalid recipient address")
@@ -255,24 +267,24 @@ def client_program(host, port, user):
                             #user_communications
                             encrypted_nonce_2 = base64.b64decode(response["nonce_2"])
                             decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2)
-                        #decrypted_nonce_2_str = decrypted_nonce_2_bytes.decode('utf-8') ##problem
                             decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
                             print(decrypted_nonce_2, "decrypted nonce 2")
 
                             nonce_2minus1 = decrypted_nonce_2 - 1
                             nonce_2minus1_bytes = nonce_2minus1.to_bytes((nonce_2minus1.bit_length() + 7) // 8, 'big')
                             nonce_3 = random.randint(1, 99999999)
+                            print(nonce_3, "nonce 3 from client B")
                             nonce_3_bytes = nonce_3.to_bytes((nonce_3.bit_length() + 7) // 8, 'big')
-                            # nonce = {
-                            #     "nonce_2minus1": nonce_2minus1_bytes,
-                            #     "nonce_3": nonce_3_bytes
-                            # }
-                            # encrypted_nonces = encrypt_with_key(shared_key, nonce)
-                            # message = {
-                            #     "type": "nonce_check_1",
-                            #     "nonces" : base64.b64encode(encrypted_nonces).decode()
-                            # }
-                            #client_socket.sendto(json.dumps(message).encode(), )
+                            nonce = {
+                                "nonce_2minus1": nonce_2minus1_bytes,
+                                "nonce_3": nonce_3_bytes
+                            }
+                            encrypted_nonces = encrypt_with_key(shared_key, nonce)
+                            message = {
+                                "type": "nonce_check_1",
+                                "nonces" : base64.b64encode(encrypted_nonces).decode()
+                            }
+                            client_socket.sendto(json.dumps(message).encode(), )
                         # elif response["type"] == "nonce_check_1":
                         #     encrypted_nonces = base64.b64decode(response['nonces'])
                         #     #decrypt_nonces = decrypt_key() decrypt the encrypted nonces with the shared key .. add a dictionary storage containing users and their shared keys with them
@@ -309,9 +321,8 @@ def client_program(host, port, user):
                     elif cmd[0] == 'send' and len(cmd) >= 3:
                         # Extract the username to send to and the message text
                         to_username = cmd[1]
-                        message_text = ' '.join(cmd[2:])
                         # Call the new function to handle the send command
-                        handle_send_command(to_username, message_text, K, client_socket, server_add)
+                        handle_send_command(to_username, K, client_socket, server_add)
                     elif cmd[0] == 'exit':
                         exit_message = {'type': 'exit', 'USERNAME': user}
                         send_message(client_socket, server_add, exit_message)

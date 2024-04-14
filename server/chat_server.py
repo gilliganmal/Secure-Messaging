@@ -303,11 +303,10 @@ def handle_send_message(data, address, server_socket):
 
                     from_user = decrypted_message['from']
                     to_user = decrypted_message['to']
-                    message_data = decrypted_message['message']
                     nonce_1 = decrypted_message['nonce_1']     
                                 
                     # You should now have the decrypted message
-                    print(f"{from_user} wants to send a message to {to_user}: {message_data}")
+                    print(f"{from_user} wants to send a message to {to_user}")
 
                     recipient_address = get_addr(to_user)
                     if recipient_address not in users:
@@ -319,33 +318,35 @@ def handle_send_message(data, address, server_socket):
                         server_socket.sendto(json.dumps(error_response).encode('utf-8'), address)
                     else:
                     # Generate a new shared key between the two users
-                        shared_key_KAB = generate_private_key()
-                        print(shared_key_KAB, "shared key")
-                        # Encrypt the new shared key with the shared key between the server and the from user
-                        messageA_contents =  {
-                            "nonce_1": nonce_1,
-                            "shared_key": shared_key_KAB,
-                            "to_address": recipient_address
-                        }
-                        messageA_bytes = json.dumps(messageA_contents).encode('utf-8')
-                        encrypted_messageA_contents = encrypt_with_key(K, messageA_bytes)
-                        encrypted_messageA_base64 = base64.b64encode(encrypted_messageA_contents).decode('utf-8')
-                        # Encrypt the new shared key with the shared key between the server and the to user
+                        shared_key = generate_private_key()
+                        print(shared_key, "shared key between A and B from server before encrypting")
+
                         K_to = users[recipient_address]['K_server']
                         K_to_bytes = derive_key(K_to)
-                        messageB_contents = {
-                            "from_user": from_user,
-                            "shared_key": shared_key_KAB
+                        ticket_to_B_contents = {
+                            "shared_key": shared_key,
+                            "from_user": from_user
                         }
-                        messageB_bytes = json.dumps(messageB_contents).encode('utf-8')
-                        encrypted_messageB_contents = encrypt_with_key(K_to_bytes, messageB_bytes)
-                        encrypted_messageB_base64 = base64.b64encode(encrypted_messageB_contents).decode('utf-8')
+                        ticket_to_B_bytes = json.dumps(ticket_to_B_contents).encode('utf-8')
+                        encrypted_ticket_to_B = encrypt_with_key(K_to_bytes, ticket_to_B_bytes)
+                        ticket_to_B = base64.b64encode(encrypted_ticket_to_B).decode('utf-8')
+
+                        # Encrypt the new shared key with the shared key between the server and the from user
+                        message_content_to_A =  {
+                            "nonce_1": nonce_1,
+                            "shared_key": shared_key,
+                            "to_address": recipient_address,
+                            "ticket_to_B": ticket_to_B
+                        }
+                        message_bytes = json.dumps(message_content_to_A).encode('utf-8')
+                        encrypted_message_contents = encrypt_with_key(K, message_bytes)
+                        message_contents = base64.b64encode(encrypted_message_contents).decode('utf-8')
+                        # Encrypt the new shared key with the shared key between the server and the to user for ticket to b                       
                         message = {
                             "type": "server_send",
-                            "data": encrypted_messageA_base64,
-                            "recipient_data": encrypted_messageB_base64
+                            "data": message_contents,
                         }
-                        print(message)
+                        print(message, "message being sent from the server to A")
                         server_socket.sendto(json.dumps(message).encode('utf-8'), address)
                 except InvalidTag as e:
                     print("Decryption failed: InvalidTag", e)
