@@ -292,9 +292,6 @@ def client_program(host, port, user):
                         #     # then actually send the original message to the recipient encrypted using the shared key and all future messages as well
 
 
-
-
-
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
