@@ -329,7 +329,7 @@ def client_program(host, port, user):
                                         shared_key = info['shared_key']
                                         decrypted_nonces_bytes = decrypt_with_key(shared_key, encrypted_nonces)
                                         print(decrypted_nonces_bytes, "decrypted nonces bytes")
-                                        nonce_2minus1 = int.from_bytes(decrypted_nonces_bytes[:4], 'big')
+                                        nonce_2minus1 = int.from_bytes(decrypted_nonces_bytes['nonce_2minus1'], 'big')
                                         nonce_3 = int.from_bytes(decrypted_nonces_bytes[4:8], 'big')
                                         
                                         print(f"Checking for user {username}: expected {info['nonce_2'] - 1}, got {nonce_2minus1}")
