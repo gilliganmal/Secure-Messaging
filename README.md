@@ -34,10 +34,10 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 
 ### Pre-Configured Users
 
-- **Username**: bob | **Password**: bobpassword
-- **Username**: alice | **Password**: alicepassword
-- **Username**: aishu | **Password**: aishupassword
-- **Username**: mallory | **Password**: mallorypassword
+- **Username**: bob | **Password**: Pol!ce-b*gel1-Dimp/3-FrAme-G0li@tH
+- **Username**: alice | **Password**: P3bble_Cur5e_Fo*twork_(haps8_Purify
+- **Username**: aishu | **Password**: l?m0n9_envy_radiAnc3_$t&uNch_prINt
+- **Username**: mallory | **Password**: chaRacTer.muLLed0.uNs*lved.V@cate.sm^dGy
 
 ## Design Slides
 
