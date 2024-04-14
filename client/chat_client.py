@@ -319,7 +319,6 @@ def client_program(host, port, user):
 
                         elif response["type"] == "nonce_check_1":  # sender will receive this from the recipient
                             try:
-                                # Decrypt the nonce using the stored shared key
                                 encrypted_nonces = base64.b64decode(response['nonces'])
                                 found_match = False
 
@@ -328,9 +327,12 @@ def client_program(host, port, user):
                                     if 'nonce_2' in info:
                                         shared_key = info['shared_key']
                                         decrypted_nonces_bytes = decrypt_with_key(shared_key, encrypted_nonces)
-                                        print(decrypted_nonces_bytes, "decrypted nonces bytes")
-                                        nonce_2minus1 = int.from_bytes(decrypted_nonces_bytes['nonce_2minus1'], 'big')
-                                        nonce_3 = int.from_bytes(decrypted_nonces_bytes[4:8], 'big')
+                                        # Decode bytes to string and load as JSON
+                                        decrypted_nonces_str = decrypted_nonces_bytes.decode('utf-8')
+                                        decrypted_nonces = json.loads(decrypted_nonces_str)
+                                        print(decrypted_nonces, "decrypted nonces bytes")
+                                        nonce_2minus1 = int.from_bytes(base64.b64decode(decrypted_nonces['nonce_2minus1']), 'big')
+                                        nonce_3 = int.from_bytes(base64.b64decode(decrypted_nonces['nonce_3']), 'big')
                                         
                                         print(f"Checking for user {username}: expected {info['nonce_2'] - 1}, got {nonce_2minus1}")
                                         
@@ -358,16 +360,36 @@ def client_program(host, port, user):
                             except Exception as e:
                                 print(f"Error processing nonce_check_1: {e}")
 
-                        # elif response["type"] == "nonce_check_2":
-                        #     #user_communications
-                        #     encrypted_nonce_3minus1 = base64.b64decode(response["nonce_3minus1"])
-                        #     decrypted_nonce_3minus1_bytes = decrypt_with_key(shared_key, encrypted_nonce_3minus1)
-                        #     decrypted_nonce3minus1= int.from_bytes(decrypted_nonce_3minus1_bytes, byteorder='big')  # Parse string to JSON
-                        #     # if decrypted_nonce3minus1 is actually the nonce3 that you sent minus 1, print out a message saying mutual authentication successful
-                        #     # then actually send the original message to the recipient encrypted using the shared key and all future messages as well
+                        elif response["type"] == "nonce_check_2":
+                            try:
+                                encrypted_nonce_3 = base64.b64decode(response['nonce_3minus1'])
+                                found_match = False
 
-
-                        if response["type"] == "GOODBYE":
+                                # Loop through user_communications to find which nonce_3 matches the nonce_3minus1 you received
+                                for username, info in user_communications.items():
+                                    if 'nonce_3' in info:
+                                        shared_key = info['shared_key']
+                                        decrypted_nonce_3_bytes = decrypt_with_key(shared_key, encrypted_nonce_3)
+                                        
+                                        # Convert bytes directly to integer
+                                        nonce_3minus1 = int.from_bytes(decrypted_nonce_3_bytes, 'big')
+                                        
+                                        print(f"Checking for user {username}: expected {info['nonce_3'] - 1}, got {nonce_3minus1}")
+                                        
+                                        if nonce_3minus1 == info['nonce_3'] - 1:
+                                            found_match = True
+                                            break
+                                if not found_match:
+                                    print("User verification failed. Nonce mismatch.")
+                                    return                      
+                                #client_socket.sendto(json.dumps(message).encode(), recipient_address)
+                                print("Nonce 3 check message received successfully.")
+                                
+                            except Exception as e:
+                                print(f"Error processing nonce_check_: {e}")
+                        
+                        
+                        elif response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
                             exit(0)                                 
