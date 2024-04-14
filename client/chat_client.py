@@ -90,13 +90,13 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
 
 # Function to handle 'send' command
 def handle_send_command(to_username, message_text, K, client_socket, server_address):
-    nonce = random.randint(1, 99999999)  # Generate a random nonce
+    nonce_1 = random.randint(1, 99999999)  # Generate a random nonce
     # Create the message dictionary
     message_dict = {
         'from': user,
         'to': to_username,
         'message': message_text,
-        'nonce': nonce
+        'nonce_1': nonce_1
     }
     # Convert dictionary to JSON and encode to bytes
     message_bytes = json.dumps(message_dict).encode('utf-8')
@@ -222,21 +222,21 @@ def client_program(host, port, user):
 
                                 recipient_address = decrypted_data_A["to_address"]
                                 shared_key_with_recipient = decrypted_data_A["shared_key"]
-                                verify_nonce = decrypted_data_A["nonce"]
+                                shared_key = derive_key(shared_key_with_recipient)
+                                print(shared_key, "shared key")
+                                verify_nonce_1 = decrypted_data_A["nonce_1"]
                                 data_to_be_sent_to_recipient = response["recipient_data"]
 
                                 # Convert recipient_address from list to tuple and use it
                                 if recipient_address:
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
 
-                                    # Now use recipient_tuple in sendto
-                                    #print("sending this .....")
-                                    #print(data_to_be_sent_to_recipient)
-                                    whole_response = { "type": "client_send",
-                                                      "from": user,
-                                                      "shared": shared_key_with_recipient,
-                                                      "verifier": verify_nonce,
-                                                      "message": data_to_be_sent_to_recipient
+                                    nonce_2 = random.randint(1, 99999999)
+                                    nonce_2_bytes = nonce_2.to_bytes((nonce_2.bit_length() + 7) // 8, 'big')
+                                    encrypted_nonce_2 = encrypt_with_key(shared_key, nonce_2_bytes)
+                                    whole_response = { "type": "shared_key",
+                                                      "recipient_data": data_to_be_sent_to_recipient,
+                                                      "nonce_2": base64.b64encode(encrypted_nonce_2).decode()
                                     }
                                     client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
                                 else:
@@ -244,21 +244,57 @@ def client_program(host, port, user):
 
                             except Exception as e:
                                 print(f"Failed to process server_send data: {e}")
-                        elif response["type"] == "client_send":
-                            message = response["message"]
-                            shared_key = response["shared"]
-                            verifier = response["verifier"]
-                            from_user = response["from"]
-                            print("\n -> FROM %s: %s" % (from_user, message))
-##START HERE 4/13
                         elif response["type"] == "shared_key":
-                            # Decrypt the message 
-                            encrypted_data_B = base64.b64decode(response["recipient_data"])
-                            decrypted_data_B_bytes = decrypt_with_key(K, encrypted_data_B)
-                            decrypted_data_B_str = decrypted_data_B_bytes.decode('utf-8')  # Convert bytes to string
-                            decrypted_data_B = json.loads(decrypted_data_B_str)  # Parse string to JSON
+                            #user_communications = {}
+                            #ADD A TRY CATCH HERE
+                            encrypted_data = base64.b64decode(response["recipient_data"])
+                            decrypted_data_bytes = decrypt_with_key(K, encrypted_data)
+                            decrypted_data_B_str = decrypted_data_bytes.decode('utf-8')  # Convert bytes to string
+                            decrypted_data = json.loads(decrypted_data_B_str)  # Parse string to JSON
+                            shared_key_with_sender = decrypted_data["shared_key"]
+                            shared_key = derive_key(shared_key_with_sender)
+                            from_user = decrypted_data["from_user"]
+                            #user_communications
+                            encrypted_nonce_2 = base64.b64decode(response["nonce_2"])
+                            decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2)
+                        #decrypted_nonce_2_str = decrypted_nonce_2_bytes.decode('utf-8') ##problem
+                            decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
 
-                            shared_key_with_sender = decrypted_data_B["shared_key"]
+                            nonce_2minus1 = decrypted_nonce_2 - 1
+                            nonce_2minus1_bytes = nonce_2minus1.to_bytes((nonce_2minus1.bit_length() + 7) // 8, 'big')
+                            nonce_3 = random.randint(1, 99999999)
+                            nonce_3_bytes = nonce_3.to_bytes((nonce_3.bit_length() + 7) // 8, 'big')
+                            # nonce = {
+                            #     "nonce_2minus1": nonce_2minus1_bytes,
+                            #     "nonce_3": nonce_3_bytes
+                            # }
+                            # encrypted_nonces = encrypt_with_key(shared_key, nonce)
+                            # message = {
+                            #     "type": "nonce_check_1",
+                            #     "nonces" : base64.b64encode(encrypted_nonces).decode()
+                            # }
+                            #client_socket.sendto(json.dumps(message).encode(), )
+                        # elif response["type"] == "nonce_check_1":
+                        #     encrypted_nonces = base64.b64decode(response['nonces'])
+                        #     #decrypt_nonces = decrypt_key() decrypt the encrypted nonces with the shared key .. add a dictionary storage containing users and their shared keys with them
+                        #     #check to see that received n2 - 1 is actually the n2 nonce that you sent - 1
+                        #     #send back n3 - 1 to complete mutual authentication
+                        #     message = {
+                        #         #"type": "nonce_check_2"
+                        #         #"nonce_3minus1" : 
+                        #     }
+                        #     #send to the the sender
+                        # elif response["type"] == "nonce_check_2":
+                        #     #user_communications
+                        #     encrypted_nonce_3minus1 = base64.b64decode(response["nonce_3minus1"])
+                        #     decrypted_nonce_3minus1_bytes = decrypt_with_key(shared_key, encrypted_nonce_3minus1)
+                        #     decrypted_nonce3minus1= int.from_bytes(decrypted_nonce_3minus1_bytes, byteorder='big')  # Parse string to JSON
+                        #     # if decrypted_nonce3minus1 is actually the nonce3 that you sent minus 1, print out a message saying mutual authentication successful
+                        #     # then actually send the original message to the recipient encrypted using the shared key and all future messages as well
+
+
+
+
 
                         if response["type"] == "GOODBYE":
                             print("\n" + response["message"])

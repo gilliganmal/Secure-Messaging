@@ -300,7 +300,7 @@ def handle_send_message(data, address, server_socket):
                     from_user = decrypted_message['from']
                     to_user = decrypted_message['to']
                     message_data = decrypted_message['message']
-                    nonce = decrypted_message['nonce']     
+                    nonce_1 = decrypted_message['nonce_1']     
                                 
                     # You should now have the decrypted message
                     print(f"{from_user} wants to send a message to {to_user}: {message_data}")
@@ -316,9 +316,10 @@ def handle_send_message(data, address, server_socket):
                     else:
                     # Generate a new shared key between the two users
                         shared_key_KAB = generate_private_key()
+                        print(shared_key_KAB, "shared key")
                         # Encrypt the new shared key with the shared key between the server and the from user
                         messageA_contents =  {
-                            "nonce": nonce,
+                            "nonce_1": nonce_1,
                             "shared_key": shared_key_KAB,
                             "to_address": recipient_address
                         }
@@ -329,7 +330,7 @@ def handle_send_message(data, address, server_socket):
                         K_to = users[recipient_address]['K_server']
                         K_to_bytes = derive_key(K_to)
                         messageB_contents = {
-                            #"nonce": nonce,
+                            "from_user": from_user,
                             "shared_key": shared_key_KAB
                         }
                         messageB_bytes = json.dumps(messageB_contents).encode('utf-8')
@@ -340,7 +341,6 @@ def handle_send_message(data, address, server_socket):
                             "data": encrypted_messageA_base64,
                             "recipient_data": encrypted_messageB_base64
                         }
-                        print("got to server")
                         print(message)
                         server_socket.sendto(json.dumps(message).encode('utf-8'), address)
                 except InvalidTag as e:
