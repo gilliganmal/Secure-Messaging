@@ -41,10 +41,6 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 
 [Include links to your latest design slides here]
 
-## Usage
-
-Here's how you could structure the "Usage" section of your README to explain the three commands that the client can execute:
-
 ### Usage
 
 The client application provides three main commands:
