@@ -4,7 +4,7 @@ Aishwarya Vinod, Mallory Gilligan
 ## Description
 
 This application provides a cryptographically secure way to message your friends!
-Simply sign in with your username/password [sorry members only 😉] and send any
+Simply sign in with your username/password (sorry members only 😉) and send any
 message your heart may desire to your bestest firends using send. Want to know who is online?
 Just ask the program to list! The world is your oyster, and we're a messaging program!
 
