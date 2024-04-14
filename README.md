@@ -6,8 +6,7 @@ A project for CY4740 Network Security at Northeastern Univeristy
 ## Description
 
 This application provides a cryptographically secure way to message your friends!
-Simply sign in with your username/password (sorry members only 😉) and send any
-message your heart may desire to your bestest firends using send. Want to know who is online?
+Simply sign in with your username/password (sorry members only 😉) and send any message your heart may desire to your bestest friends using send. Want to know who is online?
 Just ask the program to list! The world is your oyster, and we're a messaging program!
 
 ## Installation

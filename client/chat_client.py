@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 list_mes = {'type': 'list'}
+global messagetobesent
+global recp_username
 
 # Function to send messages
 def send_message(client_socket, server_address, message):
@@ -382,13 +384,32 @@ def client_program(host, port, user):
                                 if not found_match:
                                     print("User verification failed. Nonce mismatch.")
                                     return                      
-                                #client_socket.sendto(json.dumps(message).encode(), recipient_address)
                                 print("Nonce 3 check message received successfully.")
-                                
+                                message = {
+                                    "type": "authenticated"}
+                                client_socket.sendto(json.dumps(message).encode(), user_communications[from_user]['address'])
+                                print("sent")
                             except Exception as e:
                                 print(f"Error processing nonce_check_: {e}")
-                        
-                        
+
+                        elif response["type"] == "authenticated":
+                            print(messagetobesent, "message to be sent")
+                            print(recp_username, "recipient username")
+                            recp_address = user_communications[recp_username]['address']
+                            receive_message = {
+                                "type": "receive_message",
+                                "message": messagetobesent,
+                                "username": user,
+                            }
+                            print(receive_message, "receive message")
+                            send_message(client_socket, recp_address, receive_message)
+                            print("Please enter command: ", end=' ', flush=True)
+
+                        elif response["type"] == "receive_message":
+                            from_user = response["username"]
+                            print("\n<- From %s: %s" % (from_user, response["message"]))
+                            print("Please enter command: ", end=' ', flush=True)
+                                                 
                         elif response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
@@ -406,6 +427,8 @@ def client_program(host, port, user):
                     elif cmd[0] == 'send' and len(cmd) >= 3:
                         # Extract the username to send to and the message text
                         to_username = cmd[1]
+                        recp_username = to_username
+                        messagetobesent = get_message(cmd)
                         # Call the new function to handle the send command
                         handle_send_command(to_username, K, client_socket, server_add)
                     elif cmd[0] == 'exit':
@@ -428,7 +451,6 @@ def client_program(host, port, user):
 
 
 # gets the whole message as opposed to one word
-# IDK IF WE STILL NEED THIS
 def get_message(cmd):
     mes = ''
     length = len(cmd)
