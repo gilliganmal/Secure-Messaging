@@ -98,7 +98,6 @@ def server_program(port):
     try:
         while True:
             conn, address = server_socket.recvfrom(65535)  # accept new connection
-            print(f"Received connection from {address}, type: {type(address)}")  # Correct logging
             data = json.loads(conn.decode())
             print(f"Data from {address}: {data}")  # Correctly associate data with source address
             
@@ -268,11 +267,16 @@ def fetch_usernames():
 
 # path if user validation fails
 def failed_auth(address, server_socket):
-    message = {"type": "error", "message": "User verification failed", "login": "yes"}
-    check_fails(users[address]['username'])
-    del users[address] 
-    server_socket.sendto(json.dumps(message).encode(), address)
-    print(users[address]['username'] + " removed")
+    if address in users:
+        username = users[address]['username']
+        message = {"type": "error", "message": "User verification failed", "login": "yes"}
+        check_fails(username)
+        del users[address]
+        server_socket.sendto(json.dumps(message).encode(), address)
+        print(username + " removed")
+    else:
+        print(f"No user found at address {address}")
+
 
 
 # lists all users currently online
@@ -309,6 +313,7 @@ def handle_send_message(data, address, server_socket):
                     print(f"{from_user} wants to send a message to {to_user}")
 
                     recipient_address = get_addr(to_user)
+                    sender_address = get_addr(from_user)
                     if recipient_address not in users:
                         error_message = "User offline or cannot be reached. Try again later."
                         error_message_bytes = error_message.encode('utf-8')
@@ -325,7 +330,8 @@ def handle_send_message(data, address, server_socket):
                         K_to_bytes = derive_key(K_to)
                         ticket_to_B_contents = {
                             "shared_key": shared_key,
-                            "from_user": from_user
+                            "from_user": from_user,
+                            "sender_address": sender_address,
                         }
                         ticket_to_B_bytes = json.dumps(ticket_to_B_contents).encode('utf-8')
                         encrypted_ticket_to_B = encrypt_with_key(K_to_bytes, ticket_to_B_bytes)
