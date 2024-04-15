@@ -96,7 +96,6 @@ def decrypt_with_key(key, encrypted_data_with_nonce):
 def handle_send_command(to_username, K, client_socket, server_address):
     username = to_username
     user_communications.setdefault(username, {}) #to make sure that the sender keeps track of the recipient
-    print(user_communications, "user communications when sender sends")
     nonce_1 = random.randint(1, 99999999)  # Generate a random nonce
     global last_sent_nonce_1  # since we are using this variable outside this function
     last_sent_nonce_1 = nonce_1  # Store the last sent nonce for verification
@@ -152,7 +151,6 @@ def client_program(host, port, user):
                     if data:
                         response = json.loads(data)
                         # Inside client_program, after receiving the SRP_RESPONSE message
-                        #print("response here " + str(response))
                         if response["type"] == "SRP_RESPONSE":
                             try:
                                 # Parse the server's response
@@ -232,8 +230,6 @@ def client_program(host, port, user):
                                 recipient_address = decrypted_data_A["to_address"]
                                 shared_key_AB = decrypted_data_A["shared_key"]
                                 shared_key = derive_key(shared_key_AB)
-                                print(shared_key, "shared key")
-
                         
                                 verify_nonce_1 = decrypted_data_A["nonce_1"]
                                 if verify_nonce_1 != last_sent_nonce_1:
@@ -245,8 +241,6 @@ def client_program(host, port, user):
                                 # Convert recipient_address from list to tuple and use it
                                 if recipient_address:
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
-                                    print(user_communications, "user communications after sender receives message back from server (Server_Send)")
-                                    print(to_username, "to_username right now")
                                     #for the sender to store info on the recipient
                                     nonce_2 = random.randint(1, 99999999)
                                     user_communications[to_username] = {
@@ -254,7 +248,6 @@ def client_program(host, port, user):
                                     'address': recipient_tuple,
                                     'nonce_2': nonce_2
                                     }
-                                    print(user_communications, "user communications after sender stores recipient info")              
                                     nonce_2_bytes = nonce_2.to_bytes((nonce_2.bit_length() + 7) // 8, 'big')
                                     encrypted_nonce_2 = encrypt_with_key(shared_key, nonce_2_bytes)
                                     whole_response = { "type": "shared_key",
@@ -262,7 +255,6 @@ def client_program(host, port, user):
                                                       "recipient_data": data_to_be_sent_to_recipient,
                                                       "nonce_2": base64.b64encode(encrypted_nonce_2).decode()
                                     }
-                                    print(nonce_2, "nonce 2 sent by client A")
                                     client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
                                 else:
                                     print("Invalid recipient address")
@@ -278,10 +270,7 @@ def client_program(host, port, user):
                             shared_key_with_sender = decrypted_data["shared_key"]
                             shared_key = derive_key(shared_key_with_sender)
                             from_user = decrypted_data["from_user"]
-                            print(from_user, "sender user when recipient receives shared key from sender")
-                            print(user_communications, "user communications when recipient receives shared key from sender")
                             user_communications[from_user] = {}
-                            print(user_communications, "user communications after recipient adds the sender")
                             sender_address = decrypted_data["sender_address"]
                             sender_tuple = (sender_address[0], int(sender_address[1]))  # Convert list to tuple and ensure port is an integer
 
@@ -290,14 +279,10 @@ def client_program(host, port, user):
                             encrypted_nonce_2 = base64.b64decode(response["nonce_2"])
                             decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2)
                             decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
-                            print(decrypted_nonce_2, "decrypted nonce 2")
 
                             nonce_2minus1 = decrypted_nonce_2 - 1
-                            print(nonce_2minus1, "nonce 2 minus 1")
                             nonce_2minus1_bytes = nonce_2minus1.to_bytes((nonce_2minus1.bit_length() + 7) // 8, 'big')
-                            print(nonce_2minus1_bytes, "nonce 2 minus 1 bytes")
                             nonce_3 = random.randint(1, 99999999)
-                            print(nonce_3, "nonce 3 from client B")
                             nonce_3_bytes = nonce_3.to_bytes((nonce_3.bit_length() + 7) // 8, 'big')
                             nonce = {
                                 "nonce_2minus1": base64.b64encode(nonce_2minus1_bytes).decode('utf-8'),  # Encode as base64 for JSON compatibility
@@ -310,13 +295,11 @@ def client_program(host, port, user):
                                 "type": "nonce_check_1",
                                 "nonces": base64.b64encode(encrypted_nonces).decode('utf-8')  # Encode encrypted data to base64 for transmission
                             }
-                            print("message being sent to client B")
                             user_communications[from_user] = {
                                 'shared_key': shared_key,
                                 'address': sender_tuple,
                                 'nonce_3': nonce_3
                             } #dictionary to store the shared key between users
-                            print(user_communications, "user communications after recipient adds the sender's info")
                             client_socket.sendto(json.dumps(message).encode(), sender_tuple)
 
                         elif response["type"] == "nonce_check_1":  # sender will receive this from the recipient
@@ -332,12 +315,9 @@ def client_program(host, port, user):
                                         # Decode bytes to string and load as JSON
                                         decrypted_nonces_str = decrypted_nonces_bytes.decode('utf-8')
                                         decrypted_nonces = json.loads(decrypted_nonces_str)
-                                        print(decrypted_nonces, "decrypted nonces bytes")
                                         nonce_2minus1 = int.from_bytes(base64.b64decode(decrypted_nonces['nonce_2minus1']), 'big')
                                         nonce_3 = int.from_bytes(base64.b64decode(decrypted_nonces['nonce_3']), 'big')
-                                        
-                                        print(f"Checking for user {username}: expected {info['nonce_2'] - 1}, got {nonce_2minus1}")
-                                        
+                                                                                
                                         if nonce_2minus1 == info['nonce_2'] - 1:
                                             from_user = username
                                             found_match = True
@@ -357,7 +337,6 @@ def client_program(host, port, user):
                                 }
                                 recipient_address = user_communications[from_user]['address']
                                 client_socket.sendto(json.dumps(message).encode(), recipient_address)
-                                print("Nonce check message sent successfully.")
                                 
                             except Exception as e:
                                 print(f"Error processing nonce_check_1: {e}")
@@ -375,33 +354,26 @@ def client_program(host, port, user):
                                         
                                         # Convert bytes directly to integer
                                         nonce_3minus1 = int.from_bytes(decrypted_nonce_3_bytes, 'big')
-                                        
-                                        print(f"Checking for user {username}: expected {info['nonce_3'] - 1}, got {nonce_3minus1}")
-                                        
+                                                                                
                                         if nonce_3minus1 == info['nonce_3'] - 1:
                                             found_match = True
                                             break
                                 if not found_match:
                                     print("User verification failed. Nonce mismatch.")
                                     return                      
-                                print("Nonce 3 check message received successfully.")
                                 message = {
                                     "type": "authenticated"}
                                 client_socket.sendto(json.dumps(message).encode(), user_communications[from_user]['address'])
-                                print("sent")
                             except Exception as e:
                                 print(f"Error processing nonce_check_: {e}")
 
                         elif response["type"] == "authenticated":
-                            print(messagetobesent, "message to be sent")
-                            print(recp_username, "recipient username")
                             recp_address = user_communications[recp_username]['address']
                             receive_message = {
                                 "type": "receive_message",
                                 "message": messagetobesent,
                                 "username": user,
                             }
-                            print(receive_message, "receive message")
                             send_message(client_socket, recp_address, receive_message)
                             print("Please enter command: ", end=' ', flush=True)
 

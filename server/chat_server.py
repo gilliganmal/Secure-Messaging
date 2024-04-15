@@ -98,10 +98,8 @@ def server_program(port):
     try:
         while True:
             conn, address = server_socket.recvfrom(65535)  # accept new connection
-            data = json.loads(conn.decode())
-            print(f"Data from {address}: {data}")  # Correctly associate data with source address
-            
-            print("from connected user: " + str(data))
+            data = json.loads(conn.decode())            
+            print("from connected user: " + str(data) + "from " + str(address))
             message_type = data['type']
 
             # branches based on what type of packet we received
@@ -113,7 +111,6 @@ def server_program(port):
                 list_users(server_socket, address)
             elif message_type == 'SEND':
                 print(f"Received SEND from {address}, message: {data}")
-                print(f"Current users: {users}")
                 if address not in users:
                     print(f"Address {address} not found in users dict.")
                 else:
@@ -191,7 +188,6 @@ def store_user(data, address, conn):
 # Updates running count if password is incorrect
 # starts 5 minute lockout 
 def check_fails(user):
-    print("checking fails")
     if user in failed_attempts.keys():
         failed_attempts[user] += 1
         if failed_attempts[user] >= 3:
@@ -199,7 +195,6 @@ def check_fails(user):
             failed_attempts[user] = time.time()
     else:
         failed_attempts[user] = 1
-    print(failed_attempts[user])
 
 
 # determines if a user is currently locked out
@@ -273,7 +268,6 @@ def failed_auth(address, server_socket):
         check_fails(username)
         del users[address]
         server_socket.sendto(json.dumps(message).encode(), address)
-        print(username + " removed")
     else:
         print(f"No user found at address {address}")
 
@@ -324,8 +318,6 @@ def handle_send_message(data, address, server_socket):
                     else:
                     # Generate a new shared key between the two users
                         shared_key = generate_private_key()
-                        print(shared_key, "shared key between A and B from server before encrypting")
-
                         K_to = users[recipient_address]['K_server']
                         K_to_bytes = derive_key(K_to)
                         ticket_to_B_contents = {
@@ -352,7 +344,6 @@ def handle_send_message(data, address, server_socket):
                             "type": "server_send",
                             "data": message_contents,
                         }
-                        print(message, "message being sent from the server to A")
                         server_socket.sendto(json.dumps(message).encode('utf-8'), address)
                 except InvalidTag as e:
                     print("Decryption failed: InvalidTag", e)
