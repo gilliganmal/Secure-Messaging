@@ -18,6 +18,8 @@ from utils import *
 list_mes = {'type': 'list'}
 global messagetobesent
 global recp_username
+K = None # global variable to hold the derived shared key with server
+
 
 # Function to send messages
 def send_message(client_socket, server_address, message):
@@ -91,7 +93,17 @@ def handle_send_command(to_username, K, client_socket, server_address):
     send_message(client_socket, server_address, send_message_dict)
 
 
-K = None #global variable to hold the derived shared key with server
+# gets the whole message as opposed to one word
+def get_message(cmd):
+    mes = ''
+    length = len(cmd)
+    start = 2
+    while start < length:
+        mes += cmd[start]
+        mes += " "
+        start = start + 1
+    return mes
+
 def client_program(host, port, user):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # instantiate
     server_add = (host, port)
@@ -112,12 +124,14 @@ def client_program(host, port, user):
             sockets_list = [sys.stdin, client_socket]
             read_sockets, _, _ = select.select(sockets_list, [], [], 10)  # monitor for read events with timeout
             if not read_sockets:
+                # if server doesnt send check-in means it timed out
                 print("No data received from the server. Exiting.")
                 exit_message = {'type': 'exit', 'USERNAME': user}
                 send_message(client_socket, server_add, exit_message)
                 client_socket.close()
                 sys.exit(0)
 
+            # Start listenting
             for sock in read_sockets:
                 if sock == client_socket:
                     data = sock.recv(65535).decode()  # receive response
@@ -160,12 +174,13 @@ def client_program(host, port, user):
                             except Exception as e:
                                 print("Error computing shared key:", e)
 
-
+                        # Inside client_program, after receiving the AUTH_RESPONSE message
                         if response["type"] == "AUTH_RESPONSE":
                             # Decrypt encrypted_c2 received from server
                             encrypted_c2_base64 = response["encrypted_c2"]
                             encrypted_c2 = base64.b64decode(encrypted_c2_base64)
 
+                            # verify user password and allow login
                             try:  
                                 decrypted_c2 = decrypt_with_key(K, encrypted_c2, True)  # K is your derived key
                                 decrypted_c2_int = int.from_bytes(decrypted_c2, byteorder='big')
@@ -176,10 +191,14 @@ def client_program(host, port, user):
                                     print("Log in successful!\nPlease enter command: ", end=' ', flush=True)
                                 else:
                                     print("Server authentication failed")
+
                             except Exception as e:
                                 print("Error decrypting c_2:", e)
+
+                        # handle all the many errors that may arrise  
                         elif response["type"] == "error":
                             print(response["message"])
+                            # some errors block loging back in, these allow for another try
                             if(response["login"]) == "yes":
                                     user = input("Please enter your username: ")
                                     client_program(host, port, user)
@@ -191,51 +210,54 @@ def client_program(host, port, user):
                             decrypted_data = decrypt_with_key(K, encrypted_data, True)
                             print("\n<- " + decrypted_data.decode('utf-8'), "\nPlease enter command: ", end=' ', flush=True)
                         
-                        
+                        # handle response from server after requesting to send
                         elif response["type"] == "server_send":
                             try:
                                 encrypted_data_A = base64.b64decode(response["data"])
                                 decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A, True)
                                 decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
                                 decrypted_data_A = json.loads(decrypted_data_A_str)
-
-
                                 recipient_address = decrypted_data_A["to_address"]
                                 shared_key_AB = decrypted_data_A["shared_key"]
                                 shared_key = derive_key(shared_key_AB)
-                        
                                 verify_nonce_1 = decrypted_data_A["nonce_1"]
+
                                 if verify_nonce_1 != last_sent_nonce_1:
                                     print("Nonce verification failed. Server cannot be trusted.")
                                     sys.exit(0)
-                                data_to_be_sent_to_recipient = decrypted_data_A["ticket_to_B"]
 
+                                data_to_be_sent_to_recipient = decrypted_data_A["ticket_to_B"]
 
                                 # Convert recipient_address from list to tuple and use it
                                 if recipient_address:
                                     recipient_tuple = (recipient_address[0], int(recipient_address[1]))  # Convert list to tuple and ensure port is an integer
                                     #for the sender to store info on the recipient
                                     nonce_2 = random.randint(1, 99999999)
+
                                     user_communications[to_username] = {
                                     'shared_key': shared_key,
                                     'address': recipient_tuple,
                                     'nonce_2': nonce_2
                                     }
+
                                     nonce_2_bytes = nonce_2.to_bytes((nonce_2.bit_length() + 7) // 8, 'big')
                                     encrypted_nonce_2 = encrypt_with_key(shared_key, nonce_2_bytes)
+
                                     whole_response = { "type": "shared_key",
                                                       "from_user": user,
                                                       "recipient_data": data_to_be_sent_to_recipient,
                                                       "nonce_2": base64.b64encode(encrypted_nonce_2).decode()
                                     }
+
                                     client_socket.sendto(json.dumps(whole_response).encode(), recipient_tuple)
                                 else:
                                     print("Invalid recipient address")
 
                             except Exception as e:
                                 print(f"Failed to process server_send data: {e}")
+                        
+                        # handles reciving a shared key from server for communications between clients
                         elif response["type"] == "shared_key": #recipient will receive this
-                            #ADD A TRY CATCH HERE??
                             encrypted_data = base64.b64decode(response["recipient_data"])
                             decrypted_data_bytes = decrypt_with_key(K, encrypted_data, True)
                             decrypted_data_B_str = decrypted_data_bytes.decode('utf-8')  # Convert bytes to string
@@ -245,10 +267,8 @@ def client_program(host, port, user):
                             from_user = decrypted_data["from_user"]
                             user_communications[from_user] = {}
                             sender_address = decrypted_data["sender_address"]
-                            sender_tuple = (sender_address[0], int(sender_address[1]))  # Convert list to tuple and ensure port is an integer
 
-
-                
+                            sender_tuple = (sender_address[0], int(sender_address[1]))  # Convert list to tuple and ensure port is an integer                
                             encrypted_nonce_2 = base64.b64decode(response["nonce_2"])
                             decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2, True)
                             decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
@@ -275,6 +295,7 @@ def client_program(host, port, user):
                             } #dictionary to store the shared key between users
                             client_socket.sendto(json.dumps(message).encode(), sender_tuple)
 
+                        # nonce verification
                         elif response["type"] == "nonce_check_1":  # sender will receive this from the recipient
                             try:
                                 encrypted_nonces = base64.b64decode(response['nonces'])
@@ -318,6 +339,7 @@ def client_program(host, port, user):
                                 print(f"Error processing nonce_check_1: {e}")
         
 
+                        #another nonce verification
                         elif response["type"] == "nonce_check_2":
                             try:
                                 encrypted_nonce_3 = base64.b64decode(response['nonce_3minus1'])
@@ -344,6 +366,7 @@ def client_program(host, port, user):
                             except Exception as e:
                                 print(f"Error processing nonce_check: {e}")
 
+                        # once communication is authenticated we can acutally send the message
                         elif response["type"] == "authenticated":
                             recp_address = user_communications[recp_username]['address']
                             receive_message = {
@@ -353,12 +376,12 @@ def client_program(host, port, user):
                             }
                             send_message(client_socket, recp_address, receive_message)
                             print("Please enter command: ", end=' ', flush=True)
-
+                        # read message sent
                         elif response["type"] == "receive_message":
                             from_user = response["username"]
                             print("\n<- From %s: %s" % (from_user, response["message"]))
                             print("Please enter command: ", end=' ', flush=True)
-                                                 
+                        # if server shuts down                      
                         elif response["type"] == "GOODBYE":
                             print("\n" + response["message"])
                             print("\nExiting the client.")    
@@ -377,9 +400,13 @@ def client_program(host, port, user):
                         # Extract the username to send to and the message text
                         to_username = cmd[1]
                         recp_username = to_username
-                        messagetobesent = get_message(cmd)
-                        # Call the new function to handle the send command
-                        handle_send_command(to_username, K, client_socket, server_add)
+                        if recp_username == user:
+                            print("You cant message yourself silly!")
+                            print("\nPlease enter command: ")
+                        else:
+                            messagetobesent = get_message(cmd)
+                            # Call the new function to handle the send command
+                            handle_send_command(to_username, K, client_socket, server_add)
                     elif cmd[0] == 'exit':
                         exit_message = {'type': 'exit', 'USERNAME': user}
                         send_message(client_socket, server_add, exit_message)
@@ -397,18 +424,6 @@ def client_program(host, port, user):
         send_message(client_socket, server_add, exit_message)
         print("\nExiting the client.")
         sys.exit(0)  # Ensure the client exits after sending the message
-
-
-# gets the whole message as opposed to one word
-def get_message(cmd):
-    mes = ''
-    length = len(cmd)
-    start = 2
-    while start < length:
-        mes += cmd[start]
-        mes += " "
-        start = start + 1
-    return mes
 
 if __name__ == '__main__':
     sys.path.append('..')  # Add parent directory to Python path
