@@ -275,7 +275,6 @@ def handle_send_message(data, address, server_socket):
                     encrypted_data_with_nonce = base64.b64decode(data['data'])
                     decrypted_data = decrypt_with_key(K, encrypted_data_with_nonce, False)
                     decrypted_message = json.loads(decrypted_data.decode('utf-8'))
-
                     from_user = decrypted_message['from']
                     to_user = decrypted_message['to']
                     nonce_1 = decrypted_message['nonce_1']     
@@ -293,6 +292,7 @@ def handle_send_message(data, address, server_socket):
                         # Encrypt with the shared key
                         server_socket.sendto(json.dumps(error_response).encode('utf-8'), address)
                     else:
+
                     # Generate a new shared key between the two users
                         shared_key = generate_private_key()
                         K_to = users[recipient_address]['K_server']
@@ -331,15 +331,16 @@ if __name__ == '__main__':
     count = 0
     while count < 3:
         check = getpass.getpass("Enter Password: ")
+        # verifying the hash of the password
         check = base64.b64encode(check.encode("utf-8"))
         check = str(check)
         check = base64.a85encode(check.encode("utf-8"))
         if check == b'@OG;[;KQ>K1d*2':
             print("You have successfully logged in as admin\n")
+
             parser = argparse.ArgumentParser(usage="./chat_server <-sp port>")
             parser.add_argument('-sp', type=int, required=False, dest='port')
             args = parser.parse_args()
-
             port = args.port
 
             js = {
@@ -351,9 +352,7 @@ if __name__ == '__main__':
 
             with open('../server_config.json', 'w') as f:
                 f.write(config)
-
             server_program(port)
-
         else:
             print("Incorrect try again")
             count += 1
