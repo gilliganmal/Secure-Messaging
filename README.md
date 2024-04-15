@@ -33,10 +33,11 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 
 ### Pre-Configured Users
 
-- **Username**: bob | **Password**: Pol!ce-b*gel1-Dimp/3-FrAme-G0li@tH
-- **Username**: alice | **Password**: P3bble_Cur5e_Fo*twork_(haps8_Purify
-- **Username**: aishu | **Password**: l?m0n9_envy_radiAnc3_$t&uNch_prINt
-- **Username**: mallory | **Password**: chaRacTer.muLLed0.uNs*lved.V@cate.sm^dGy
+- **Username**: bob | **Password**: P3bble_Cur5e
+- **Username**: alice | **Password**: HarryPotter_203
+- **Username**: aishu | **Password**: Ch*colate101
+- **Username**: mallory | **Password**: chaRacTer.muLLed0
+
 
 
 ### Usage
