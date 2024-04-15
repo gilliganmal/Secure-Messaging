@@ -318,10 +318,8 @@ def client_program(host, port, user):
                                             break
 
                                 if not found_match:
-                                    print("User mismatch")
-                                    exit_message = {'type': 'exit', 'USERNAME': from_user}
-                                    send_message(client_socket, server_add, exit_message)
-                                    return
+                                    print("Nonce mismatch")
+                                    print("Please enter command: ", end=' ', flush=True)
 
 
                                 # Correctly handling nonce_3
@@ -337,6 +335,7 @@ def client_program(host, port, user):
                                 
                             except Exception as e:
                                 print(f"Error processing nonce_check_1: {e}")
+                                print("Please enter command: ", end=' ', flush=True)
         
 
                         #another nonce verification
@@ -402,7 +401,7 @@ def client_program(host, port, user):
                         recp_username = to_username
                         if recp_username == user:
                             print("You cant message yourself silly!")
-                            print("\nPlease enter command: ")
+                            print("\nPlease enter command: ", end=' ', flush=True)
                         else:
                             messagetobesent = get_message(cmd)
                             # Call the new function to handle the send command
