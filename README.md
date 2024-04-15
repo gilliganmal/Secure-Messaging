@@ -38,9 +38,6 @@ Just ask the program to list! The world is your oyster, and we're a messaging pr
 - **Username**: aishu | **Password**: l?m0n9_envy_radiAnc3_$t&uNch_prINt
 - **Username**: mallory | **Password**: chaRacTer.muLLed0.uNs*lved.V@cate.sm^dGy
 
-## Design Slides
-
-[Include links to your latest design slides here]
 
 ### Usage
 

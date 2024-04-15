@@ -297,8 +297,11 @@ def client_program(host, port, user):
                                             break
 
                                 if not found_match:
-                                    print("User verification failed. Nonce mismatch.")
+                                    print("User mismatch")
+                                    exit_message = {'type': 'exit', 'USERNAME': from_user}
+                                    send_message(client_socket, server_add, exit_message)
                                     return
+
 
                                 # Correctly handling nonce_3
                                 nonce_3minus1 = nonce_3 - 1
@@ -313,6 +316,7 @@ def client_program(host, port, user):
                                 
                             except Exception as e:
                                 print(f"Error processing nonce_check_1: {e}")
+        
 
                         elif response["type"] == "nonce_check_2":
                             try:
@@ -338,7 +342,7 @@ def client_program(host, port, user):
                                     "type": "authenticated"}
                                 client_socket.sendto(json.dumps(message).encode(), user_communications[from_user]['address'])
                             except Exception as e:
-                                print(f"Error processing nonce_check_: {e}")
+                                print(f"Error processing nonce_check: {e}")
 
                         elif response["type"] == "authenticated":
                             recp_address = user_communications[recp_username]['address']
