@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import socket 
-import os
 import json, base64
 import sys
 import select
@@ -11,7 +10,10 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
+# setting path
+sys.path.append('../')
+# importing
+from utils import *
 
 list_mes = {'type': 'list'}
 global messagetobesent
@@ -63,35 +65,6 @@ def compute_client_shared_key(B, g, p, a, u, password):
     
     return K
 
-
-# Derive a 256-bit key K_client
-def derive_key(K_client):
-    # Convert K_client to bytes
-    K_client_bytes = K_client.to_bytes((K_client.bit_length() + 7) // 8, byteorder="big")
-    # Derive a key using HKDF
-    hkdf = HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info = b'handshake data',
-        backend=default_backend()
-    )
-    return hkdf.derive(K_client_bytes)
-
-#encrypt with the key
-def encrypt_with_key(key, plaintext):
-    aesgcm = AESGCM(key)
-    nonce = os.urandom(12)  # AES-GCM standard nonce size
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
-    return nonce + ciphertext  # Return nonce concatenated with ciphertext
-
-
-# Function to decrypt data with AES-GCM
-def decrypt_with_key(key, encrypted_data_with_nonce):
-    aesgcm = AESGCM(key)
-    nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
-    return aesgcm.decrypt(nonce, ciphertext, None)
-
 # Function to handle 'send' command
 def handle_send_command(to_username, K, client_socket, server_address):
     username = to_username
@@ -137,7 +110,7 @@ def client_program(host, port, user):
         # While online
         while True:
             sockets_list = [sys.stdin, client_socket]
-            read_sockets, _, _ = select.select(sockets_list, [], [], 12)  # monitor for read events with timeout
+            read_sockets, _, _ = select.select(sockets_list, [], [], 10)  # monitor for read events with timeout
             if not read_sockets:
                 print("No data received from the server. Exiting.")
                 exit_message = {'type': 'exit', 'USERNAME': user}
@@ -194,7 +167,7 @@ def client_program(host, port, user):
                             encrypted_c2 = base64.b64decode(encrypted_c2_base64)
 
                             try:  
-                                decrypted_c2 = decrypt_with_key(K, encrypted_c2)  # K is your derived key
+                                decrypted_c2 = decrypt_with_key(K, encrypted_c2, True)  # K is your derived key
                                 decrypted_c2_int = int.from_bytes(decrypted_c2, byteorder='big')
                                 
                                 # Check if decrypted c_2 matches the one we sent
@@ -215,14 +188,14 @@ def client_program(host, port, user):
                         elif response["type"] == "user_offline":
                             # Decrypt the message from the server
                             encrypted_data = base64.b64decode(response["message"])
-                            decrypted_data = decrypt_with_key(K, encrypted_data)
+                            decrypted_data = decrypt_with_key(K, encrypted_data, True)
                             print("\n<- " + decrypted_data.decode('utf-8'), "\nPlease enter command: ", end=' ', flush=True)
                         
                         
                         elif response["type"] == "server_send":
                             try:
                                 encrypted_data_A = base64.b64decode(response["data"])
-                                decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A)
+                                decrypted_data_A_bytes = decrypt_with_key(K, encrypted_data_A, True)
                                 decrypted_data_A_str = decrypted_data_A_bytes.decode('utf-8')
                                 decrypted_data_A = json.loads(decrypted_data_A_str)
 
@@ -264,7 +237,7 @@ def client_program(host, port, user):
                         elif response["type"] == "shared_key": #recipient will receive this
                             #ADD A TRY CATCH HERE??
                             encrypted_data = base64.b64decode(response["recipient_data"])
-                            decrypted_data_bytes = decrypt_with_key(K, encrypted_data)
+                            decrypted_data_bytes = decrypt_with_key(K, encrypted_data, True)
                             decrypted_data_B_str = decrypted_data_bytes.decode('utf-8')  # Convert bytes to string
                             decrypted_data = json.loads(decrypted_data_B_str)  # Parse string to JSON
                             shared_key_with_sender = decrypted_data["shared_key"]
@@ -277,7 +250,7 @@ def client_program(host, port, user):
 
                 
                             encrypted_nonce_2 = base64.b64decode(response["nonce_2"])
-                            decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2)
+                            decrypted_nonce_2_bytes = decrypt_with_key(shared_key, encrypted_nonce_2, True)
                             decrypted_nonce_2 = int.from_bytes(decrypted_nonce_2_bytes, byteorder='big')  # Parse string to JSON
 
                             nonce_2minus1 = decrypted_nonce_2 - 1
@@ -311,7 +284,7 @@ def client_program(host, port, user):
                                 for username, info in user_communications.items():
                                     if 'nonce_2' in info:
                                         shared_key = info['shared_key']
-                                        decrypted_nonces_bytes = decrypt_with_key(shared_key, encrypted_nonces)
+                                        decrypted_nonces_bytes = decrypt_with_key(shared_key, encrypted_nonces, True)
                                         # Decode bytes to string and load as JSON
                                         decrypted_nonces_str = decrypted_nonces_bytes.decode('utf-8')
                                         decrypted_nonces = json.loads(decrypted_nonces_str)
@@ -350,7 +323,7 @@ def client_program(host, port, user):
                                 for username, info in user_communications.items():
                                     if 'nonce_3' in info:
                                         shared_key = info['shared_key']
-                                        decrypted_nonce_3_bytes = decrypt_with_key(shared_key, encrypted_nonce_3)
+                                        decrypted_nonce_3_bytes = decrypt_with_key(shared_key, encrypted_nonce_3, True)
                                         
                                         # Convert bytes directly to integer
                                         nonce_3minus1 = int.from_bytes(decrypted_nonce_3_bytes, 'big')
@@ -434,6 +407,7 @@ def get_message(cmd):
     return mes
 
 if __name__ == '__main__':
+    sys.path.append('..')  # Add parent directory to Python path
     with open('../server_config.json', 'r') as f:
         config_data = json.load(f)
         host = config_data['host']

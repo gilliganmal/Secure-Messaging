@@ -6,11 +6,15 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-import time
 import sys
+# setting path
+sys.path.append('../')
+# importing
+from utils import *
+import sys
+import time
 import threading
 lockout_duration = 300  # Lockout duration in seconds
-
 
 # Dictionary to store user information
 users = {}
@@ -46,33 +50,6 @@ def compute_shared_key(gamodp, b, u, verifier, p):
     K_server = pow(gamodp * pow(verifier, u, p), b, p)
     return K_server
 
-# Derive a 256-bit key from K_client
-def derive_key(K_server):
-    # Convert K_client to bytes
-    K_server_bytes = K_server.to_bytes((K_server.bit_length() + 7) // 8, byteorder="big")
-    # Derive a key using HKDF
-    hkdf = HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info = b'handshake data',
-        backend=default_backend()
-    )
-    return hkdf.derive(K_server_bytes)
-
-#encrypt with the key
-def encrypt_with_key(key, plaintext):
-    aesgcm = AESGCM(key)
-    nonce = os.urandom(12)  # AES-GCM standard nonce size
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
-    return nonce + ciphertext  # Return nonce concatenated with ciphertext
-
-# Function to decrypt data with AES-GCM
-def decrypt_with_key(key, encrypted_data_with_nonce):
-    aesgcm = AESGCM(key)
-    nonce, ciphertext = encrypted_data_with_nonce[:12], encrypted_data_with_nonce[12:]
-    return aesgcm.decrypt(nonce, ciphertext, None)
-
 # Define a function to send check-in messages to clients
 def send_checkin_messages(server_socket):
     while True:
@@ -81,7 +58,7 @@ def send_checkin_messages(server_socket):
             checkin_message = {"type": "CHECK-IN"}
             server_socket.sendto(json.dumps(checkin_message).encode(), addr)
         # Wait for 10 seconds before sending the next check-in message
-        time.sleep(10)
+        time.sleep(5)
 
 
 # handles all server operations
@@ -221,7 +198,7 @@ def handle_auth_message(data, address, server_socket):
         try:
             # Decrypt encrypted_c1
             encrypted_c1 = base64.b64decode(data['encrypted_c1'])
-            decrypted_c1 = decrypt_with_key(K, encrypted_c1)
+            decrypted_c1 = decrypt_with_key(K, encrypted_c1, False)
             # Convert decrypted_c1 from bytes to an integer
             decrypted_c1_int = int.from_bytes(decrypted_c1, byteorder='big')
             # Verify c_1 or perform necessary checks
@@ -296,7 +273,7 @@ def handle_send_message(data, address, server_socket):
                 try:
                     # Decrypt the message
                     encrypted_data_with_nonce = base64.b64decode(data['data'])
-                    decrypted_data = decrypt_with_key(K, encrypted_data_with_nonce)
+                    decrypted_data = decrypt_with_key(K, encrypted_data_with_nonce, False)
                     decrypted_message = json.loads(decrypted_data.decode('utf-8'))
 
                     from_user = decrypted_message['from']
